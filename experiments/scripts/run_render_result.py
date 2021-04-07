@@ -5,7 +5,7 @@ import gym
 import neat
 from neat.nn import FeedForwardNetwork
 
-from experiments.render_result import render_result
+from experiments.utils import render_result
 from neat_improved import CONFIGS_PATH
 
 LOAD_PATH = Path('./best_genome.pkl')

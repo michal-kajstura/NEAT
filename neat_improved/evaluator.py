@@ -6,6 +6,8 @@ from gym import Env
 from neat import Config, DefaultGenome
 from neat.nn import FeedForwardNetwork
 
+from neat_improved.action_handler import handle_action
+
 
 class GymEvaluator(abc.ABC):
     def __init__(
@@ -63,7 +65,7 @@ class MultipleRunGymEvaluator(GymEvaluator):
                 break
 
             output = network.activate(observation)
-            action = np.argmax(output)
+            action = handle_action(output, self._environment)
             observation, reward, done, _ = self._environment.step(action)
             fitness += reward
             step += 1

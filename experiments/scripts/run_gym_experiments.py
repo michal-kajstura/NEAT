@@ -1,57 +1,56 @@
+import multiprocessing
 import pickle
 from pathlib import Path
 
-import gym.wrappers
+import gym
 import neat
-from neat import StatisticsReporter, StdOutReporter
 from neat.nn import FeedForwardNetwork
 
-from experiments.render_result import render_result
+from experiments.utils import render_result, run
 from neat_improved import CONFIGS_PATH
-from neat_improved.evaluator import MultipleRunGymEvaluator
-from neat_improved.runner import NEATRunner
 
-CONFIG_PATH = CONFIGS_PATH / 'config-cart-pole-v0'
-ENV_NAME = 'CartPole-v1'
+EXPERIMENTS = [
+    {
+        'env_name': 'CartPole-v0',
+        'config_path': CONFIGS_PATH / 'config-cart-pole-v0',
+    },
+    {
+        'env_name': 'MountainCarContinuous-v0',
+        'config_path': CONFIGS_PATH / 'config-mountain-car-continous-v0'
+    },
+    {
+        'env_name': 'Pendulum-v0',
+        'config_path': CONFIGS_PATH / 'config-pendulum-v0',
+    },
+]
 NUM_GENERATIONS = 100
 RENDER_AFTER_TRAINING = True
-SAVE_PATH = Path('./best_genome.pkl')
+SAVE_DIR = Path('.')
+NUM_WORKERS = multiprocessing.cpu_count()
 
-
-config = neat.Config(
-    neat.DefaultGenome,
-    neat.DefaultReproduction,
-    neat.DefaultSpeciesSet,
-    neat.DefaultStagnation,
-    str(CONFIG_PATH),
-)
-
-environment = gym.make(ENV_NAME)
-evaluator = MultipleRunGymEvaluator(
-    environment=environment,
-    render=False,
-)
-
-runner = NEATRunner(
-    config=config,
-    evaluator=evaluator,
-    reporters=[
-        StatisticsReporter(),
-        StdOutReporter(
-            show_species_detail=False,
-        ),
-    ]
-)
-
-best_genome = runner.run(NUM_GENERATIONS)
-
-with SAVE_PATH.open('wb') as file:
-    pickle.dump(best_genome, file)
-
-if RENDER_AFTER_TRAINING:
-    network = FeedForwardNetwork.create(best_genome, config)
-    render_result(
-        environment=environment,
-        network=network,
-        steps=1000,
+for experiment in EXPERIMENTS:
+    config = neat.Config(
+        neat.DefaultGenome,
+        neat.DefaultReproduction,
+        neat.DefaultSpeciesSet,
+        neat.DefaultStagnation,
+        str(experiment['config_path']),
     )
+
+    name = experiment['env_name']
+    environment = gym.make(name)
+
+    best_genome = run(
+        environment, config, NUM_GENERATIONS, NUM_WORKERS
+    )
+
+    with (SAVE_DIR / (name + '.pkl')).open('wb') as file:
+        pickle.dump(best_genome, file)
+
+    if RENDER_AFTER_TRAINING:
+        network = FeedForwardNetwork.create(best_genome, config)
+        render_result(
+            environment=environment,
+            network=network,
+            steps=1000,
+        )
