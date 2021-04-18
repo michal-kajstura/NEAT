@@ -3,15 +3,15 @@ from pathlib import Path
 
 import gym
 import neat
+from matplotlib import animation
 from neat.nn import FeedForwardNetwork
 
 from experiments.utils import render_result
 from neat_improved import CONFIGS_PATH
 
-LOAD_PATH = Path('./best_genome.pkl')
-CONFIG_PATH = CONFIGS_PATH / 'config-cart-pole-v0'
-ENV_NAME = 'CartPole-v1'
-SAVE_PATH = Path('./best_genome.pkl')
+ENV_NAME = 'MountainCarContinuous-v0'
+LOAD_PATH = Path(f'./{ENV_NAME}.pkl')
+CONFIG_PATH = CONFIGS_PATH / 'config-mountain-car-continous-v0'
 
 
 config = neat.Config(
@@ -28,8 +28,27 @@ with LOAD_PATH.open('rb') as file:
 
 network = FeedForwardNetwork.create(genome, config)
 
-render_result(
+frames = render_result(
     environment=gym.make(ENV_NAME),
     network=network,
-    steps=1000,
+    steps=2000,
 )
+
+import matplotlib.pyplot as plt
+
+
+def save_frames_as_gif(frames, path='./', filename='gym_animation.gif'):
+    plt.tight_layout()
+    plt.figure(figsize=(frames[0].shape[1] / 72.0, frames[0].shape[0] / 72.0), dpi=72)
+
+    patch = plt.imshow(frames[0])
+    plt.axis('off')
+
+    def animate(i):
+        patch.set_data(frames[i])
+
+    anim = animation.FuncAnimation(plt.gcf(), animate, frames=len(frames), interval=50)
+    anim.save(path + filename, writer='imagemagick', fps=60)
+
+
+save_frames_as_gif(frames)

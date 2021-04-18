@@ -35,18 +35,11 @@ class MultipleRunGymEvaluator(GymEvaluator):
         max_steps: Optional[int] = None,
         render: bool = False,
     ):
-        super().__init__(
-            environment=environment,
-            render=render
-        )
+        super().__init__(environment=environment, render=render)
         self._runs_per_network = runs_per_network
         self._max_steps = max_steps or float('inf')
 
-    def evaluate(
-        self,
-        genome: DefaultGenome,
-        config: Config
-    ) -> float:
+    def evaluate(self, genome: DefaultGenome, config: Config) -> float:
         network = FeedForwardNetwork.create(genome, config)
         fitness_scores = [self._run_episode(network) for _ in range(self._runs_per_network)]
         return np.mean(fitness_scores)

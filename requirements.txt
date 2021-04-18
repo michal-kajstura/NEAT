@@ -1,3 +1,5 @@
+black==20.8b1
 gym==0.18.0
 neat-python==0.92
 numpy==1.20.1
+mlflow==1.15.0
