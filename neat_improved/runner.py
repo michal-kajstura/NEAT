@@ -1,7 +1,7 @@
 import multiprocessing
-from typing import Sequence, Optional, List, Tuple
+from typing import List, Optional, Sequence, Tuple
 
-from neat import Config, Population, ParallelEvaluator, DefaultGenome
+from neat import Config, DefaultGenome, ParallelEvaluator, Population
 from neat.reporting import BaseReporter
 
 from neat_improved.evaluator import GymEvaluator
