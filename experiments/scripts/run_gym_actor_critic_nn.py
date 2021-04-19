@@ -54,7 +54,7 @@ for env_name in EXPERIMENT_ENVS:
     result_dict['episode_nr'].extend(list(range(len(episode_times))))
     result_dict['fitness'].extend(episode_fitness_scores)
     result_dict['duration'].extend(episode_times)
-    print(result_dict)
+
     result_df = pd.DataFrame.from_dict(result_dict)
     result_df['env_name'] = env_name
     result_df.to_csv(logging_dir / 'results.csv', index=False)
