@@ -1,12 +1,15 @@
 from collections import defaultdict
 from itertools import count
 from pathlib import Path
+from time import time
+from typing import List, Optional, Tuple
 
 import gym
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
+from gym import Env
 from torch.distributions import Categorical
 
 
@@ -44,40 +47,77 @@ class Critic(nn.Module):
 
 
 class Trainer:
-    def __init__(self, env, actor, critic, n_iters, gamma=0.99):
+    def __init__(
+            self,
+            env: Env,
+            actor: nn.Module,
+            critic: nn.Module,
+            stop_time: Optional[time] = None,
+            n_iters: Optional[int] = None,
+            lr: float = 0.001,
+            gamma: float = 0.99,
+            render: bool = False,
+    ):
+        self.lr = lr
+        self.gamma = gamma
+        self.render = render
+        self.n_iters = n_iters
+        self.stop_time = stop_time
+
+        if not self.n_iters and not self.stop_time:
+            self.n_iters = 1000
+
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.history = defaultdict(list)
         self.env = env
         self.actor = actor.to(self.device)
         self.critic = critic.to(self.device)
-        self.n_iters = n_iters
-        self.gamma = gamma
         self.optimizers = {
-            'actor': optim.Adam(self.actor.parameters()),
-            'critic': optim.Adam(self.critic.parameters()),
+            'actor': optim.Adam(self.actor.parameters(), lr=self.lr),
+            'critic': optim.Adam(self.critic.parameters(), lr=self.lr),
         }
 
-    def train(self, save_dir: Path):
-        for num in range(self.n_iters):
-            self._train_episode(num)
+    def train(self, save_dir: Optional[Path] = None) -> Tuple[List, List]:
+        train_duration = 0.0
+        episode_fitness_scores = []
+        episode_times = []
+        iter_ = count() if not self.n_iters else range(self.n_iters)
 
-        save_dir.mkdir(parents=True, exist_ok=True)
-        torch.save(self.actor, save_dir.joinpath('actor.pkl'))
-        torch.save(self.critic, save_dir.joinpath('critic.pkl'))
+        for num in iter_:
+            if self.stop_time and train_duration >= self.stop_time:
+                break
+
+            start_time = time()
+            fitness = self._train_episode(num)
+            stop_time = time() - start_time
+
+            train_duration += stop_time
+            episode_fitness_scores.append(fitness)
+            episode_times.append(stop_time)
+
+        if save_dir:
+            save_dir.mkdir(parents=True, exist_ok=True)
+            torch.save(self.actor, save_dir.joinpath('actor.pkl'))
+            torch.save(self.critic, save_dir.joinpath('critic.pkl'))
+
         self.env.close()
+        return episode_fitness_scores, episode_times
 
-    def _train_episode(self, num):
+    def _train_episode(self, num: int):
         state = self.env.reset()
         episode = defaultdict(list)
+        fitness = 0.0
 
         for i in count():
-            self.env.render()
+            if self.render:
+                self.env.render()
             state = torch.FloatTensor(state).to(self.device)
             dist = self.actor(state)
             value = self.critic(state)
 
             action = dist.sample()
             state, reward, done, _ = self.env.step(action.cpu().numpy())
+            fitness += reward
             log_prob = dist.log_prob(action).unsqueeze(0)
 
             episode['log_probs'].append(log_prob)
@@ -105,6 +145,8 @@ class Trainer:
             optimizer.zero_grad()
             losses[name].backward()
             optimizer.step()
+
+        return fitness
 
     def _compute_returns(self, rewards):
         total_reward = 0
