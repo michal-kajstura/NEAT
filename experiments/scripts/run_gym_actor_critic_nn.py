@@ -6,6 +6,7 @@ import pandas as pd
 
 from experiments.utils import _prepare_logging_dir, run_actor_critic
 from neat_improved.rl.actor_critic.trainer import Actor, Critic, ActorCriticTrainer
+from neat_improved.rl.reporters import StdRLReporter
 
 EXPERIMENT_ENVS = [
     'CartPole-v0',
@@ -44,13 +45,17 @@ for env_name in EXPERIMENT_ENVS:
         env=env,
         actor=actor,
         critic=critic,
-        stop_time=STOP_TIME,
         render=RENDER_DURING_TRAINING,
         lr=LR,
         gamma=GAMMA,
         save_dir=SAVE_DIR,
+        reporters=(
+            StdRLReporter(
+                log_once_every=10,
+            ),
+        )
     )
-    episode_fitness_scores, episode_times = trainer._train(MAX_EPISODES)
+    episode_fitness_scores, episode_times = trainer._train(MAX_EPISODES, STOP_TIME)
 
     result_dict['episode_nr'].extend(list(range(len(episode_times))))
     result_dict['fitness'].extend(episode_fitness_scores)

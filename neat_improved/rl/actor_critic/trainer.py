@@ -54,7 +54,6 @@ class ActorCriticTrainer(BaseTrainer):
         env: Env,
         actor: nn.Module,
         critic: nn.Module,
-        stop_time: Optional[time] = None,
         lr: float = 0.001,
         gamma: float = 0.99,
         render: bool = False,
@@ -65,7 +64,6 @@ class ActorCriticTrainer(BaseTrainer):
         self.lr = lr
         self.gamma = gamma
         self.render = render
-        self.stop_time = stop_time
         self.save_dir = save_dir
         self.reporters = reporters or ()
 
@@ -79,12 +77,12 @@ class ActorCriticTrainer(BaseTrainer):
             'critic': optim.Adam(self.critic.parameters(), lr=self.lr),
         }
 
-    def _train(self, iterations: Optional[int]):
+    def _train(self, iterations: Optional[int], stop_time: Optional[int]):
         start_time = time()
         iter_ = count() if iterations is None else range(iterations)
 
         for iteration in iter_:
-            if self.stop_time and (time() - start_time) >= self.stop_time:
+            if stop_time and (time() - start_time) >= stop_time:
                 break
 
             fitness = self._train_episode()

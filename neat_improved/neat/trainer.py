@@ -31,15 +31,17 @@ class NEATRunner(BaseTrainer):
     def _train(self, generations: Optional[int], stop_time: Optional[int]) -> DefaultGenome:
         if self._num_workers is None:
             func = self._evaluate_population_fitness
-            if stop_time is not None:
-                func = _timeout_func(func, time(), stop_time)
         else:
             parallel = ParallelEvaluator(
                 num_workers=self._num_workers,
                 eval_function=self._evaluator.evaluate,
-                timeout=stop_time,
             )
             func = parallel.evaluate
+
+        if stop_time is not None:
+            # it may not be 100% reliable but it's the best we can achieve without writing a custom
+            # parallel executor
+            func = _timeout_func(func, time(), stop_time)
 
         try:
             return self._population.run(

@@ -49,11 +49,18 @@ class FileRLReporter(BaseRLReporter):
 
 
 class StdRLReporter(BaseRLReporter):
-    def __init__(self):
+    def __init__(
+        self,
+        log_once_every: int = 1,
+    ):
         self.start_time = None
+        self.log_once_every = log_once_every
 
     def on_episode_end(self, iteration: int, fitness: float):
         if self.start_time is None:
             self.start_time = time()
 
-        print(f'iteration: {iteration}, fitness: {fitness}, time: {time() - self.start_time:.2f}s')
+        if (iteration % self.log_once_every) == 0:
+            print(
+                f'iteration: {iteration}, fitness: {fitness}, time: {time() - self.start_time:.2f}s'
+            )

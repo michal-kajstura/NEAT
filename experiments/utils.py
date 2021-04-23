@@ -139,7 +139,14 @@ def run_actor_critic(
         lr=lr,
         gamma=gamma,
         save_dir=logging_dir,
-        reporters=(StdRLReporter(), FileRLReporter(logging_dir)),
+        reporters=(
+            StdRLReporter(
+                log_once_every=10,
+            ),
+            FileRLReporter(
+                save_dir_path=logging_dir,
+            ),
+        ),
         use_gpu=use_gpu,
     )
     trainer.train(num_iterations, stop_time)

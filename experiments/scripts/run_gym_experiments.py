@@ -9,7 +9,7 @@ from neat_improved import NEAT_CONFIGS_PATH, PROJECT_PATH
 RUN_ACTOR_CRITIC = True
 RUN_NEAT = True
 
-STOP_TIME = 1 * 60
+STOP_TIME = 2 * 60
 
 LOGGING_DIR = PROJECT_PATH / 'logs'
 LOGGING_DIR.mkdir(exist_ok=True)
