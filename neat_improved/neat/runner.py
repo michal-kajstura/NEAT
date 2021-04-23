@@ -1,13 +1,20 @@
+import abc
 import multiprocessing
-from typing import List, Optional, Sequence, Tuple
+from typing import Optional, Sequence, Tuple
 
 from neat import Config, DefaultGenome, ParallelEvaluator, Population
 from neat.reporting import BaseReporter
 
-from neat_improved.evaluator import GymEvaluator
+from neat_improved.neat.evaluator import GymEvaluator
 
 
-class NEATRunner:
+class BaseRunner(abc.ABC):
+    @abc.abstractmethod
+    def run(self, iterations: int):
+        pass
+
+
+class NEATRunner(BaseRunner):
     def __init__(
         self,
         config: Config,

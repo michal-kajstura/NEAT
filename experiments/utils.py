@@ -6,10 +6,10 @@ from gym import Env
 from neat import Config, StatisticsReporter, StdOutReporter
 from neat.nn import FeedForwardNetwork
 
-from neat_improved.action_handler import handle_action
-from neat_improved.evaluator import MultipleRunGymEvaluator
-from neat_improved.reporters import FileReporter
-from neat_improved.runner import NEATRunner
+from neat_improved.neat.action_handler import handle_action
+from neat_improved.neat.evaluator import MultipleRunGymEvaluator
+from neat_improved.neat.reporters import FileReporter
+from neat_improved.neat.runner import NEATRunner
 
 
 def render_result(

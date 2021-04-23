@@ -46,7 +46,7 @@ class Critic(nn.Module):
         return value
 
 
-class Trainer:
+class ActorCritic:
     def __init__(
             self,
             env: Env,
@@ -167,5 +167,5 @@ if __name__ == '__main__':
     actor = Actor(state_size, action_size)
     critic = Critic(state_size, action_size)
 
-    trainer = Trainer(env, actor, critic, n_iters=1000)
+    trainer = ActorCritic(env, actor, critic, n_iters=1000)
     trainer.train(save_dir=Path('../models'))

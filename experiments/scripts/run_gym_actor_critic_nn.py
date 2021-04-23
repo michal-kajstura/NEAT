@@ -5,7 +5,7 @@ import gym
 import pandas as pd
 
 from experiments.utils import _prepare_logging_dir
-from rl.actor_critic import Actor, Critic, Trainer
+from neat_improved.rl.actor_critic import Actor, Critic, ActorCritic
 
 EXPERIMENT_ENVS = [
     'CartPole-v0',
@@ -38,7 +38,7 @@ for env_name in EXPERIMENT_ENVS:
     actor = Actor(state_size, action_size)
     critic = Critic(state_size, action_size)
 
-    trainer = Trainer(
+    trainer = ActorCritic(
         env=env,
         actor=actor,
         critic=critic,
