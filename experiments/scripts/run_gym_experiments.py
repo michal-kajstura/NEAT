@@ -31,12 +31,12 @@ EXPERIMENTS = [
         'config_path': CONFIGS_PATH / 'config-pendulum-v0',
     },
 ]
-NUM_GENERATIONS = 100
+NUM_GENERATIONS = 50
 RENDER_AFTER_TRAINING = True
 SAVE_DIR = Path('.')
 NUM_WORKERS = multiprocessing.cpu_count()
-NUM_REPEATS = 3
-LOGGING_DIR = Path('./logs1')
+NUM_REPEATS = 5
+LOGGING_DIR = Path('./logs_neat_openai')
 
 
 for experiment in EXPERIMENTS:

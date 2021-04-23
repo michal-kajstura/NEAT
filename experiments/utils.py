@@ -44,6 +44,8 @@ def run(
 ):
     evaluator = MultipleRunGymEvaluator(
         environment=environment,
+        max_steps=1000,
+        runs_per_network=3,
         render=False,
     )
 
