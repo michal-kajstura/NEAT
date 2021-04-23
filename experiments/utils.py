@@ -13,9 +13,9 @@ from neat_improved.runner import NEATRunner
 
 
 def render_result(
-    environment: Env,
-    network: FeedForwardNetwork,
-    steps: int = 500,
+        environment: Env,
+        network: FeedForwardNetwork,
+        steps: int = 500,
 ):
     frames = []
     observation = environment.reset()
@@ -35,12 +35,12 @@ def render_result(
 
 
 def run(
-    environment: Env,
-    config: Config,
-    num_generations: int,
-    num_workers: Optional[int] = None,
-    num_repeats: int = 1,
-    logging_root: Optional[Path] = None,
+        environment: Env,
+        config: Config,
+        num_generations: int,
+        num_workers: Optional[int] = None,
+        num_repeats: int = 1,
+        logging_root: Optional[Path] = None,
 ):
     evaluator = MultipleRunGymEvaluator(
         environment=environment,
@@ -64,11 +64,11 @@ def run(
 
 
 def _run(
-    evaluator: MultipleRunGymEvaluator,
-    config: Config,
-    num_generations: int,
-    logging_root: Optional[Path] = None,
-    num_workers: Optional[int] = None,
+        evaluator: MultipleRunGymEvaluator,
+        config: Config,
+        num_generations: int,
+        logging_root: Optional[Path] = None,
+        num_workers: Optional[int] = None,
 ):
     logging_dir = _prepare_logging_dir(
         evaluator._environment,
@@ -90,8 +90,8 @@ def _run(
 
 
 def _prepare_logging_dir(
-    environment: Env,
-    root: Path,
+        environment: Env,
+        root: Path,
 ) -> Path:
     now = datetime.now()
     time = now.strftime('%Y-%m-%d %H:%M:%S')
