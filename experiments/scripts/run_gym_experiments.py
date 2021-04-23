@@ -1,72 +1,76 @@
 import multiprocessing
-import pickle
-from pathlib import Path
 
 import gym
 import neat
-from neat.nn import FeedForwardNetwork
 
-from experiments.utils import render_result, run
-from neat_improved import CONFIGS_PATH
+from experiments.utils import run_neat, run_actor_critic
+from neat_improved import NEAT_CONFIGS_PATH, PROJECT_PATH
 
-EXPERIMENTS = [
-    {
-        'env_name': 'LunarLander-v2',
-        'config_path': CONFIGS_PATH / 'config-lunar-lander-v2',
-    },
-    {
-        'env_name': 'BipedalWalker-v3',
-        'config_path': CONFIGS_PATH / 'config-bipedal-walker-v3',
-    },
-    {
-        'env_name': 'CartPole-v0',
-        'config_path': CONFIGS_PATH / 'config-cart-pole-v0',
-    },
-    {
-        'env_name': 'MountainCarContinuous-v0',
-        'config_path': CONFIGS_PATH / 'config-mountain-car-continous-v0',
-    },
-    {
-        'env_name': 'Pendulum-v0',
-        'config_path': CONFIGS_PATH / 'config-pendulum-v0',
-    },
-]
-NUM_GENERATIONS = 100
-RENDER_AFTER_TRAINING = True
-SAVE_DIR = Path('.')
-NUM_WORKERS = multiprocessing.cpu_count()
-NUM_REPEATS = 3
-LOGGING_DIR = Path('./logs1')
+RUN_ACTOR_CRITIC = True
+RUN_NEAT = True
+
+STOP_TIME = 2 * 60
+
+LOGGING_DIR = PROJECT_PATH / 'logs'
+LOGGING_DIR.mkdir(exist_ok=True)
+
+experiments = (
+    'CartPole-v0',
+    'LunarLander-v2',
+)
+
+# Actor Critic stuff
+MAX_EPISODES = None
+LR = 0.0001
+GAMMA = 0.99
+USE_GPU = True  # probably should be set to False
+ACTOR_CRITIC_LOGGING_DIR = LOGGING_DIR / 'actor_critic'
+ACTOR_CRITIC_LOGGING_DIR.mkdir(exist_ok=True)
 
 
-for experiment in EXPERIMENTS:
-    config = neat.Config(
-        neat.DefaultGenome,
-        neat.DefaultReproduction,
-        neat.DefaultSpeciesSet,
-        neat.DefaultStagnation,
-        str(experiment['config_path']),
-    )
+# NEAT stuff
+NEAT_CONFIGS = {
+    'LunarLander-v2': NEAT_CONFIGS_PATH / 'config-lunar-lander-v2',
+    'BipedalWalker-v3': NEAT_CONFIGS_PATH / 'config-bipedal-walker-v3',
+    'CartPole-v0': NEAT_CONFIGS_PATH / 'config-cart-pole-v0',
+    'MountainCarContinuous-v0': NEAT_CONFIGS_PATH / 'config-mountain-car-continous-v0',
+    'Pendulum-v0': NEAT_CONFIGS_PATH / 'config-pendulum-v0',
+}
+NUM_GENERATIONS = None
+NUM_WORKERS = multiprocessing.cpu_count()  # probably should be set to 1
+NUM_REPEATS = 1
+NEAT_LOGGING_DIR = LOGGING_DIR / 'neat'
+NEAT_LOGGING_DIR.mkdir(exist_ok=True)
 
-    name = experiment['env_name']
-    environment = gym.make(name)
 
-    best_genome = run(
-        environment,
-        config,
-        NUM_GENERATIONS,
-        NUM_WORKERS,
-        logging_root=LOGGING_DIR,
-        num_repeats=NUM_REPEATS,
-    )
+for env_name in experiments:
+    environment = gym.make(env_name)
 
-    with (SAVE_DIR / (name + '.pkl')).open('wb') as file:
-        pickle.dump(best_genome, file)
+    if RUN_NEAT:
+        config = neat.Config(
+            neat.DefaultGenome,
+            neat.DefaultReproduction,
+            neat.DefaultSpeciesSet,
+            neat.DefaultStagnation,
+            str(NEAT_CONFIGS[env_name]),
+        )
 
-    if RENDER_AFTER_TRAINING:
-        network = FeedForwardNetwork.create(best_genome, config)
-        render_result(
+        best_genome = run_neat(
+            environment,
+            config,
+            num_generations=NUM_GENERATIONS,
+            stop_time=STOP_TIME,
+            num_workers=NUM_WORKERS,
+            logging_root=NEAT_LOGGING_DIR,
+        )
+
+    if RUN_ACTOR_CRITIC:
+        run_actor_critic(
             environment=environment,
-            network=network,
-            steps=1000,
+            num_iterations=MAX_EPISODES,
+            lr=LR,
+            gamma=GAMMA,
+            stop_time=STOP_TIME,
+            use_gpu=USE_GPU,
+            logging_root=ACTOR_CRITIC_LOGGING_DIR,
         )

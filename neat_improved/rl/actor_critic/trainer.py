@@ -2,15 +2,17 @@ from collections import defaultdict
 from itertools import count
 from pathlib import Path
 from time import time
-from typing import List, Optional, Tuple
+from typing import List, Optional, Tuple, Sequence
 
-import gym
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
 from gym import Env
 from torch.distributions import Categorical
+
+from neat_improved.rl.reporters import BaseRLReporter
+from neat_improved.trainer import BaseTrainer
 
 
 class Actor(nn.Module):
@@ -46,28 +48,26 @@ class Critic(nn.Module):
         return value
 
 
-class Trainer:
+class ActorCriticTrainer(BaseTrainer):
     def __init__(
-            self,
-            env: Env,
-            actor: nn.Module,
-            critic: nn.Module,
-            stop_time: Optional[time] = None,
-            n_iters: Optional[int] = None,
-            lr: float = 0.001,
-            gamma: float = 0.99,
-            render: bool = False,
+        self,
+        env: Env,
+        actor: nn.Module,
+        critic: nn.Module,
+        lr: float = 0.001,
+        gamma: float = 0.99,
+        render: bool = False,
+        save_dir: Optional[Path] = None,
+        use_gpu: bool = True,
+        reporters: Optional[Sequence[BaseRLReporter]] = None,
     ):
         self.lr = lr
         self.gamma = gamma
         self.render = render
-        self.n_iters = n_iters
-        self.stop_time = stop_time
+        self.save_dir = save_dir
+        self.reporters = reporters or ()
 
-        if not self.n_iters and not self.stop_time:
-            self.n_iters = 1000
-
-        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        self.device = torch.device('cuda:0' if use_gpu else 'cpu')
         self.history = defaultdict(list)
         self.env = env
         self.actor = actor.to(self.device)
@@ -77,38 +77,34 @@ class Trainer:
             'critic': optim.Adam(self.critic.parameters(), lr=self.lr),
         }
 
-    def train(self, save_dir: Optional[Path] = None) -> Tuple[List, List]:
-        train_duration = 0.0
-        episode_fitness_scores = []
-        episode_times = []
-        iter_ = count() if not self.n_iters else range(self.n_iters)
+    def _train(self, iterations: Optional[int], stop_time: Optional[int]):
+        start_time = time()
+        iter_ = count() if iterations is None else range(iterations)
 
-        for num in iter_:
-            if self.stop_time and train_duration >= self.stop_time:
+        for iteration in iter_:
+            if stop_time and (time() - start_time) >= stop_time:
                 break
 
-            start_time = time()
-            fitness = self._train_episode(num)
-            stop_time = time() - start_time
+            fitness = self._train_episode()
+            self._call_reporters(
+                'on_episode_end',
+                iteration=iteration,
+                fitness=fitness,
+            )
 
-            train_duration += stop_time
-            episode_fitness_scores.append(fitness)
-            episode_times.append(stop_time)
-
-        if save_dir:
-            save_dir.mkdir(parents=True, exist_ok=True)
-            torch.save(self.actor, save_dir.joinpath('actor.pkl'))
-            torch.save(self.critic, save_dir.joinpath('critic.pkl'))
+        if self.save_dir:
+            self.save_dir.mkdir(parents=True, exist_ok=True)
+            torch.save(self.actor, self.save_dir.joinpath('actor.pkl'))
+            torch.save(self.critic, self.save_dir.joinpath('critic.pkl'))
 
         self.env.close()
-        return episode_fitness_scores, episode_times
 
-    def _train_episode(self, num: int):
+    def _train_episode(self):
         state = self.env.reset()
         episode = defaultdict(list)
         fitness = 0.0
 
-        for i in count():
+        for _ in count():
             if self.render:
                 self.env.render()
             state = torch.FloatTensor(state).to(self.device)
@@ -125,7 +121,6 @@ class Trainer:
             episode['rewards'].append(reward)
 
             if done:
-                print('Iteration: {}, Score: {}'.format(num, i))
                 break
 
         returns = self._compute_returns(episode['rewards'])
@@ -156,16 +151,6 @@ class Trainer:
             returns.insert(0, total_reward)
         return returns
 
-
-if __name__ == '__main__':
-    env = gym.make("CartPole-v0").unwrapped
-
-    state_size = env.observation_space.shape[0]
-    action_size = env.action_space.n
-    lr = 0.0001
-
-    actor = Actor(state_size, action_size)
-    critic = Critic(state_size, action_size)
-
-    trainer = Trainer(env, actor, critic, n_iters=1000)
-    trainer.train(save_dir=Path('../models'))
+    def _call_reporters(self, stage: str, *args, **kwargs):
+        for reporter in self.reporters:
+            getattr(reporter, stage)(*args, **kwargs)

@@ -6,7 +6,7 @@ from gym import Env
 from neat import Config, DefaultGenome
 from neat.nn import FeedForwardNetwork
 
-from neat_improved.action_handler import handle_action
+from neat_improved.neat.action_handler import handle_action
 
 
 class GymEvaluator(abc.ABC):
