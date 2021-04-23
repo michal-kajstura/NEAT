@@ -8,11 +8,11 @@ from matplotlib import animation
 from neat.nn import FeedForwardNetwork
 
 from experiments.utils import render_result
-from neat_improved import CONFIGS_PATH
+from neat_improved import NEAT_CONFIGS_PATH
 
 ENV_NAME = 'BipedalWalker-v3'
 LOAD_PATH = Path(f'./{ENV_NAME}.pkl')
-CONFIG_PATH = CONFIGS_PATH / 'config-bipedal-walker-v3'
+CONFIG_PATH = NEAT_CONFIGS_PATH / 'config-bipedal-walker-v3'
 
 
 config = neat.Config(
@@ -34,7 +34,6 @@ frames = render_result(
     network=network,
     steps=2000,
 )
-
 
 
 def save_frames_as_gif(frames, path='./', filename='gym_animation.gif'):

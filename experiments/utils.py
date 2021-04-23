@@ -1,3 +1,5 @@
+import json
+from collections import defaultdict
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
@@ -9,13 +11,15 @@ from neat.nn import FeedForwardNetwork
 from neat_improved.neat.action_handler import handle_action
 from neat_improved.neat.evaluator import MultipleRunGymEvaluator
 from neat_improved.neat.reporters import FileReporter
-from neat_improved.neat.runner import NEATRunner
+from neat_improved.neat.trainer import NEATRunner
+from neat_improved.rl.actor_critic.trainer import Actor, Critic, ActorCriticTrainer
+from neat_improved.rl.reporters import StdRLReporter, FileRLReporter
 
 
 def render_result(
-        environment: Env,
-        network: FeedForwardNetwork,
-        steps: int = 500,
+    environment: Env,
+    network: FeedForwardNetwork,
+    steps: int = 500,
 ):
     frames = []
     observation = environment.reset()
@@ -34,46 +38,40 @@ def render_result(
     return frames
 
 
-def run(
-        environment: Env,
-        config: Config,
-        num_generations: int,
-        num_workers: Optional[int] = None,
-        num_repeats: int = 1,
-        logging_root: Optional[Path] = None,
+def run_neat(
+    environment: Env,
+    config: Config,
+    num_generations: Optional[int],
+    stop_time: Optional[int],
+    num_workers: Optional[int] = None,
+    runs_per_network: int = 1,
+    max_steps: int = 1000,
+    logging_root: Optional[Path] = None,
 ):
     evaluator = MultipleRunGymEvaluator(
         environment=environment,
-        max_steps=1000,
-        runs_per_network=3,
-        render=False,
+        max_steps=max_steps,
+        runs_per_network=runs_per_network,
     )
 
-    best_genomes = [
-        _run(
-            evaluator=evaluator,
-            config=config,
-            num_generations=num_generations,
-            logging_root=logging_root,
-            num_workers=num_workers,
-        )
-        for _ in range(num_repeats)
-    ]
-
-    return best_genomes[-1]
-
-
-def _run(
-        evaluator: MultipleRunGymEvaluator,
-        config: Config,
-        num_generations: int,
-        logging_root: Optional[Path] = None,
-        num_workers: Optional[int] = None,
-):
     logging_dir = _prepare_logging_dir(
-        evaluator._environment,
+        environment,
         logging_root or Path('./logs'),
     )
+
+    with (logging_dir / 'hyperparameters.json').open('w') as file:
+        json.dump(
+            {
+                'num_generations': num_generations,
+                'stop_time': stop_time,
+                'num_workers': num_workers,
+                'runs_per_network': runs_per_network,
+                'max_steps': max_steps,
+            },
+            file,
+            indent=4,
+        )
+
     runner = NEATRunner(
         config=config,
         evaluator=evaluator,
@@ -85,13 +83,13 @@ def _run(
         num_workers=num_workers,
     )
 
-    best_genome = runner.run(num_generations)
+    best_genome = runner.train(num_generations, stop_time)
     return best_genome
 
 
 def _prepare_logging_dir(
-        environment: Env,
-        root: Path,
+    environment: Env,
+    root: Path,
 ) -> Path:
     now = datetime.now()
     time = now.strftime('%Y-%m-%d %H:%M:%S')
@@ -101,3 +99,47 @@ def _prepare_logging_dir(
     logging_dir.mkdir(exist_ok=True, parents=True)
 
     return logging_dir
+
+
+def run_actor_critic(
+    environment: Env,
+    num_iterations: Optional[int],
+    lr: float,
+    gamma: float,
+    stop_time: Optional = None,
+    use_gpu: bool = True,
+    logging_root: Optional[Path] = None,
+):
+    logging_dir = _prepare_logging_dir(environment, logging_root or Path('./ac_results'))
+
+    with (logging_dir / 'hyperparameters.json').open('w') as file:
+        json.dump(
+            {
+                'num_iterations': num_iterations,
+                'stop_time': stop_time,
+                'lr': lr,
+                'gamma': gamma,
+                'use_gpu': use_gpu,
+            },
+            file,
+            indent=4,
+        )
+
+    state_size = environment.observation_space.shape[0]
+    action_size = environment.action_space.n
+
+    actor = Actor(state_size, action_size)
+    critic = Critic(state_size, action_size)
+
+    trainer = ActorCriticTrainer(
+        env=environment,
+        actor=actor,
+        critic=critic,
+        render=False,
+        lr=lr,
+        gamma=gamma,
+        save_dir=logging_dir,
+        reporters=(StdRLReporter(), FileRLReporter(logging_dir)),
+        use_gpu=use_gpu,
+    )
+    trainer.train(num_iterations, stop_time)

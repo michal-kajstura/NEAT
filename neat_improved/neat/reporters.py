@@ -11,7 +11,7 @@ _SPECIES = 'species'
 _POPULATION = 'population'
 _FIELDS = {
     _SPECIES: (
-        'generation',
+        'iteration',
         'species_id',
         'size',
         'age',
@@ -21,7 +21,7 @@ _FIELDS = {
         'time_in_s',
     ),
     _POPULATION: (
-        'generation',
+        'iteration',
         'individual_id',
         'species_id',
         'fitness',
@@ -66,7 +66,7 @@ class FileReporter(BaseReporter):
                 species_id = species.get_species_id(key)
                 writer.writerow(
                     {
-                        'generation': self.generation,
+                        'iteration': self.generation,
                         'individual_id': key,
                         'species_id': species_id,
                         'fitness': individual.fitness,
@@ -80,7 +80,7 @@ class FileReporter(BaseReporter):
             for key, specie in species.species.items():
                 writer.writerow(
                     {
-                        'generation': self.generation,
+                        'iteration': self.generation,
                         'species_id': key,
                         'size': len(specie.members),
                         'age': self.generation - specie.created,

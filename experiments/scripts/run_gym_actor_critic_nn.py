@@ -4,8 +4,8 @@ from pathlib import Path
 import gym
 import pandas as pd
 
-from experiments.utils import _prepare_logging_dir
-from neat_improved.rl.actor_critic import Actor, Critic, ActorCritic
+from experiments.utils import _prepare_logging_dir, run_actor_critic
+from neat_improved.rl.actor_critic.trainer import Actor, Critic, ActorCriticTrainer
 
 EXPERIMENT_ENVS = [
     'CartPole-v0',
@@ -27,6 +27,7 @@ MODEL_SAVE_DIR = Path('../models')
 MODEL_SAVE_DIR.mkdir(parents=True, exist_ok=True)
 
 for env_name in EXPERIMENT_ENVS:
+    env = gym.make(env_name).unwrapped
     result_dict = defaultdict(list)
 
     env = gym.make(env_name).unwrapped
@@ -38,18 +39,18 @@ for env_name in EXPERIMENT_ENVS:
     actor = Actor(state_size, action_size)
     critic = Critic(state_size, action_size)
 
-    trainer = ActorCritic(
+    SAVE_DIR = MODEL_SAVE_DIR / env_name
+    trainer = ActorCriticTrainer(
         env=env,
         actor=actor,
         critic=critic,
-        n_iters=MAX_EPISODES,
         stop_time=STOP_TIME,
         render=RENDER_DURING_TRAINING,
         lr=LR,
         gamma=GAMMA,
+        save_dir=SAVE_DIR,
     )
-    SAVE_DIR = MODEL_SAVE_DIR / env_name
-    episode_fitness_scores, episode_times = trainer.train(save_dir=SAVE_DIR)
+    episode_fitness_scores, episode_times = trainer._train(MAX_EPISODES)
 
     result_dict['episode_nr'].extend(list(range(len(episode_times))))
     result_dict['fitness'].extend(episode_fitness_scores)
