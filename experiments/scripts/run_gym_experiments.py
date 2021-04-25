@@ -7,7 +7,7 @@ from experiments.utils import run_neat, run_actor_critic
 from neat_improved import NEAT_CONFIGS_PATH, PROJECT_PATH
 
 RUN_ACTOR_CRITIC = True
-RUN_NEAT = True
+RUN_NEAT = False
 
 STOP_TIME = 2 * 60
 
@@ -17,6 +17,9 @@ LOGGING_DIR.mkdir(exist_ok=True)
 experiments = (
     'CartPole-v0',
     'LunarLander-v2',
+    'MountainCarContinuous-v0',
+    'BipedalWalker-v3',
+    'Pendulum-v0',
 )
 
 # Actor Critic stuff

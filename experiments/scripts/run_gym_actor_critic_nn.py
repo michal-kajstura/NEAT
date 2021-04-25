@@ -53,7 +53,7 @@ for env_name in EXPERIMENT_ENVS:
             StdRLReporter(
                 log_once_every=10,
             ),
-        )
+        ),
     )
     episode_fitness_scores, episode_times = trainer._train(MAX_EPISODES, STOP_TIME)
 

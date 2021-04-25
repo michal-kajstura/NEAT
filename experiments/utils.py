@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Optional
 
 from gym import Env
+from gym.spaces import Discrete
 from neat import Config, StatisticsReporter, StdOutReporter
 from neat.nn import FeedForwardNetwork
 
@@ -126,10 +127,16 @@ def run_actor_critic(
         )
 
     state_size = environment.observation_space.shape[0]
-    action_size = environment.action_space.n
 
-    actor = Actor(state_size, action_size)
-    critic = Critic(state_size, action_size)
+    # is_discrete = True
+    # if isinstance(environment.action_space, Discrete):
+    #     action_size = environment.action_space.n
+    # else:
+    #     action_size = environment.action_space.shape[0]
+    #     is_discrete = False
+
+    actor = Actor(state_size, environment.action_space)
+    critic = Critic(state_size)
 
     trainer = ActorCriticTrainer(
         env=environment,

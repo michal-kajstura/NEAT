@@ -2,42 +2,77 @@ from collections import defaultdict
 from itertools import count
 from pathlib import Path
 from time import time
-from typing import List, Optional, Tuple, Sequence
+from typing import Optional, Sequence, Tuple
 
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
 from gym import Env
-from torch.distributions import Categorical
+from gym.spaces import Discrete
+from torch import Tensor
+from torch.distributions import Categorical, Normal
 
 from neat_improved.rl.reporters import BaseRLReporter
 from neat_improved.trainer import BaseTrainer
 
 
+class _ContinuousOutput(nn.Module):
+    def __init__(self, input_dim, output_dim):
+        super().__init__()
+        self.mean = nn.Linear(input_dim, output_dim)
+        self.std = nn.Linear(input_dim, output_dim)
+
+    def forward(self, x):
+        sigma = self.std(x)
+        sigma = F.softplus(sigma) + 1e-5
+        return self.mean(x), sigma
+
+
 class Actor(nn.Module):
-    def __init__(self, state_size, action_size):
+    def __init__(self, state_size, action_space):
         super(Actor, self).__init__()
-        self.state_size = state_size
-        self.action_size = action_size
-        self.linear1 = nn.Linear(self.state_size, 128)
+
+        if isinstance(action_space, Discrete):
+            self.sample = self._sample_discrete
+            self.output = nn.Linear(256, action_space.n)
+        else:
+            self.sample = self._sample_continuous
+            self.output = _ContinuousOutput(256, action_space.shape[0])
+
+        self.action_space = action_space
+        self.linear1 = nn.Linear(state_size, 128)
         self.linear2 = nn.Linear(128, 256)
-        self.linear3 = nn.Linear(256, self.action_size)
 
     def forward(self, state):
         output = F.relu(self.linear1(state))
         output = F.relu(self.linear2(output))
-        output = self.linear3(output)
+        output = self.output(output)
+        return self.sample(output)
+
+    def _sample_discrete(self, output: Tensor):
         distribution = Categorical(F.softmax(output, dim=-1))
-        return distribution
+        action = distribution.sample()
+        return action, distribution.log_prob(action)
+
+    def _sample_continuous(self, output: Tuple[Tensor, Tensor]):
+        mu, sigma = output
+
+        distribution = Normal(mu, sigma)
+        action = distribution.sample()
+        action = torch.clip(
+            action,
+            self.action_space.low[0],
+            self.action_space.high[0],
+        )
+
+        return action, distribution.log_prob(action).mean()
 
 
 class Critic(nn.Module):
-    def __init__(self, state_size, action_size):
+    def __init__(self, state_size):
         super(Critic, self).__init__()
-        self.state_size = state_size
-        self.action_size = action_size
-        self.linear1 = nn.Linear(self.state_size, 128)
+        self.linear1 = nn.Linear(state_size, 128)
         self.linear2 = nn.Linear(128, 256)
         self.linear3 = nn.Linear(256, 1)
 
@@ -108,13 +143,12 @@ class ActorCriticTrainer(BaseTrainer):
             if self.render:
                 self.env.render()
             state = torch.FloatTensor(state).to(self.device)
-            dist = self.actor(state)
+            action, log_prob = self.actor(state)
             value = self.critic(state)
 
-            action = dist.sample()
             state, reward, done, _ = self.env.step(action.cpu().numpy())
             fitness += reward
-            log_prob = dist.log_prob(action).unsqueeze(0)
+            log_prob = log_prob.unsqueeze(0)
 
             episode['log_probs'].append(log_prob)
             episode['values'].append(value)
