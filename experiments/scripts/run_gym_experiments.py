@@ -10,8 +10,9 @@ RUN_ACTOR_CRITIC = True
 RUN_NEAT = False
 
 STOP_TIME = 2 * 60
+N_REPEATS = 5
 
-LOGGING_DIR = PROJECT_PATH / 'logs'
+LOGGING_DIR = PROJECT_PATH / 'logs2'
 LOGGING_DIR.mkdir(exist_ok=True)
 
 experiments = (
@@ -24,7 +25,7 @@ experiments = (
 
 # Actor Critic stuff
 MAX_EPISODES = None
-LR = 0.0001
+LR = 0.005
 GAMMA = 0.99
 USE_GPU = True  # probably should be set to False
 ACTOR_CRITIC_LOGGING_DIR = LOGGING_DIR / 'actor_critic'
@@ -49,31 +50,32 @@ NEAT_LOGGING_DIR.mkdir(exist_ok=True)
 for env_name in experiments:
     environment = gym.make(env_name)
 
-    if RUN_NEAT:
-        config = neat.Config(
-            neat.DefaultGenome,
-            neat.DefaultReproduction,
-            neat.DefaultSpeciesSet,
-            neat.DefaultStagnation,
-            str(NEAT_CONFIGS[env_name]),
-        )
+    for _ in range(N_REPEATS):
+        if RUN_NEAT:
+            config = neat.Config(
+                neat.DefaultGenome,
+                neat.DefaultReproduction,
+                neat.DefaultSpeciesSet,
+                neat.DefaultStagnation,
+                str(NEAT_CONFIGS[env_name]),
+            )
 
-        best_genome = run_neat(
-            environment,
-            config,
-            num_generations=NUM_GENERATIONS,
-            stop_time=STOP_TIME,
-            num_workers=NUM_WORKERS,
-            logging_root=NEAT_LOGGING_DIR,
-        )
+            best_genome = run_neat(
+                environment,
+                config,
+                num_generations=NUM_GENERATIONS,
+                stop_time=STOP_TIME,
+                num_workers=NUM_WORKERS,
+                logging_root=NEAT_LOGGING_DIR,
+            )
 
-    if RUN_ACTOR_CRITIC:
-        run_actor_critic(
-            environment=environment,
-            num_iterations=MAX_EPISODES,
-            lr=LR,
-            gamma=GAMMA,
-            stop_time=STOP_TIME,
-            use_gpu=USE_GPU,
-            logging_root=ACTOR_CRITIC_LOGGING_DIR,
-        )
+        if RUN_ACTOR_CRITIC:
+            run_actor_critic(
+                environment=environment,
+                num_iterations=MAX_EPISODES,
+                lr=LR,
+                gamma=GAMMA,
+                stop_time=STOP_TIME,
+                use_gpu=USE_GPU,
+                logging_root=ACTOR_CRITIC_LOGGING_DIR,
+            )
