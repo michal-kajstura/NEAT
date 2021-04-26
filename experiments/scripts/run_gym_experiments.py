@@ -7,12 +7,12 @@ from experiments.utils import run_neat, run_actor_critic
 from neat_improved import NEAT_CONFIGS_PATH, PROJECT_PATH
 
 RUN_ACTOR_CRITIC = True
-RUN_NEAT = True
+RUN_NEAT = False
 
 STOP_TIME = 2 * 60
-N_REPEATS = 2
+N_REPEATS = 5
 
-LOGGING_DIR = PROJECT_PATH / 'logs'
+LOGGING_DIR = PROJECT_PATH / 'logs2'
 LOGGING_DIR.mkdir(exist_ok=True)
 
 experiments = (
@@ -25,7 +25,7 @@ experiments = (
 
 # Actor Critic stuff
 MAX_EPISODES = None
-LR = 0.0001
+LR = 0.005
 GAMMA = 0.99
 USE_GPU = True  # probably should be set to False
 ACTOR_CRITIC_LOGGING_DIR = LOGGING_DIR / 'actor_critic'

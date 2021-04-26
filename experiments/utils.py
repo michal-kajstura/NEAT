@@ -1,11 +1,9 @@
 import json
-from collections import defaultdict
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
 from gym import Env
-from gym.spaces import Discrete
 from neat import Config, StatisticsReporter, StdOutReporter
 from neat.nn import FeedForwardNetwork
 
@@ -13,7 +11,7 @@ from neat_improved.neat.action_handler import handle_action
 from neat_improved.neat.evaluator import MultipleRunGymEvaluator
 from neat_improved.neat.reporters import FileReporter
 from neat_improved.neat.trainer import NEATRunner
-from neat_improved.rl.actor_critic.trainer import Actor, Critic, ActorCriticTrainer
+from neat_improved.rl.actor_critic.michal_actor_critic import ActorCritic, ActorCriticTrainer
 from neat_improved.rl.reporters import StdRLReporter, FileRLReporter
 
 
@@ -128,20 +126,13 @@ def run_actor_critic(
 
     state_size = environment.observation_space.shape[0]
 
-    # is_discrete = True
-    # if isinstance(environment.action_space, Discrete):
-    #     action_size = environment.action_space.n
-    # else:
-    #     action_size = environment.action_space.shape[0]
-    #     is_discrete = False
-
-    actor = Actor(state_size, environment.action_space)
-    critic = Critic(state_size)
-
     trainer = ActorCriticTrainer(
         env=environment,
-        actor=actor,
-        critic=critic,
+        actor_critic=ActorCritic(
+            state_size=state_size,
+            action_space=environment.action_space,
+            fit_domain_strategy='tanh',
+        ),
         render=False,
         lr=lr,
         gamma=gamma,
