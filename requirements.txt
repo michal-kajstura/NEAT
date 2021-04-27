@@ -6,3 +6,4 @@ mlflow==1.15.0
 Box2D==2.3.10
 torch==1.8.1
 pandas==1.2.4
+stable-baselines3==1.0
