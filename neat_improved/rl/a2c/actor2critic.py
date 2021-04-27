@@ -1,7 +1,7 @@
 import numpy as np
 from torch import nn
 
-from neat_improved.rl.a2c_new.utils import init
+from neat_improved.rl.a2c.utils import init
 
 
 class ActorCritic(nn.Module):
@@ -12,7 +12,15 @@ class ActorCritic(nn.Module):
         init_ = lambda m: init(
             m,
             nn.init.orthogonal_,
-            lambda x: nn.init.constant_(x, 0), np.sqrt(2),
+            lambda x: nn.init.constant_(x, 0),
+            gain=np.sqrt(2),
+        )
+
+        init_value_ = lambda m: init(
+            m,
+            nn.init.orthogonal_,
+            lambda x: nn.init.constant_(x, 0),
+            gain=1,
         )
 
         self.actor = nn.Sequential(
@@ -23,7 +31,7 @@ class ActorCritic(nn.Module):
         self.critic = nn.Sequential(
             init_(nn.Linear(num_inputs, hidden_size)), nn.Tanh(),
             init_(nn.Linear(hidden_size, hidden_size)), nn.Tanh(),
-            init_(nn.Linear(hidden_size, 1)),
+            init_value_(nn.Linear(hidden_size, 1)),
         )
 
         self.train()

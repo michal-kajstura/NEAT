@@ -3,13 +3,15 @@ from itertools import count
 from time import time
 from typing import Optional, Sequence
 
+import gym
 import torch
 from stable_baselines3.common.vec_env import VecEnv
 from torch import nn, optim
+from torch.nn import functional as F
 
-from neat_improved.rl.a2c_new.actor2critic import ActorCritic
-from neat_improved.rl.a2c_new.distributions import Categorical, DiagGaussian
-from neat_improved.rl.a2c_new.utils import explained_variance
+from neat_improved.rl.a2c.actor2critic import ActorCritic
+from neat_improved.rl.a2c.distributions import Categorical, DiagGaussian
+from neat_improved.rl.a2c.utils import explained_variance
 from neat_improved.rl.reporters import BaseRLReporter
 from neat_improved.trainer import BaseTrainer
 
@@ -21,6 +23,7 @@ class A2CTrainer(BaseTrainer):
             n_steps: int = 5,
             lr: float = 7e-4,
             lr_scheduler: Optional[str] = None,
+            normalize_advantage: bool = False,
             eps: float = 1e-5,
             alpha: float = 0.99,
             max_grad_norm: float = 0.5,
@@ -53,6 +56,7 @@ class A2CTrainer(BaseTrainer):
         self.n_envs = self.vec_envs.num_envs
         self.n_steps = n_steps
         self.mini_batch = self.n_steps * self.n_envs
+        self.normalize_advantage = normalize_advantage
 
     def _train(self, iterations: Optional[int], stop_time: Optional[int]):
         start_time = time()
@@ -82,7 +86,8 @@ class A2CTrainer(BaseTrainer):
 
                 total_num_steps = (update + 1) * self.n_envs * self.n_steps
                 print(f"Updates: {update}, total env steps: {total_num_steps}, fps: {fps}")
-                print(f"Entropy: {entropy:.4f}, policy loss: {policy_loss:.4f}")
+                print(f"Entropy: {entropy:.4f}, loss: {policy_loss:.4f}")
+                print(f"Actor loss: {actor_loss:.4f}, critic loss: {critic_loss:.4f}")
                 print(f"Explained variance: {float(ev):.4f}")
                 print(f"Fitness: {fitness}")
                 print("---")
@@ -91,12 +96,15 @@ class A2CTrainer(BaseTrainer):
         state = self.vec_envs.reset()
         buffer = defaultdict(list)
         fitness = 0.0
-        entropy = 0.0
+        entropies = []
 
         for _ in range(self.n_steps):
             # take action and value based on given observations (state)
             state = torch.tensor(state, dtype=torch.float32, device=self.device)
             action, critic_values, action_log_probs, dist_entropy = self.policy(state)
+
+            if isinstance(self.vec_envs.action_space, gym.spaces.Discrete):
+                action = action.long().flatten()
 
             # take action in env and look the results
             state, reward, done, infos = self.vec_envs.step(action.cpu().numpy())
@@ -105,13 +113,16 @@ class A2CTrainer(BaseTrainer):
                 if maybeepinfo:
                     buffer['epinfos'].append(maybeepinfo)
 
-            entropy += dist_entropy
+            entropies.append(dist_entropy)
             fitness += reward.sum()
 
             buffer['log_probs'].append(action_log_probs)
             buffer['values'].append(critic_values)
             buffer['rewards'].append(torch.FloatTensor(reward).unsqueeze(1).to(self.device))
             buffer['masks'].append(torch.FloatTensor(1 - done).unsqueeze(1).to(self.device))
+
+        # Entropy loss favor exploration
+        entropy = -torch.mean(torch.stack(entropies, dim=0))
 
         next_state = torch.FloatTensor(state).to(self.device)
         next_value = self.policy.get_critic_values(next_state)
@@ -122,11 +133,13 @@ class A2CTrainer(BaseTrainer):
         values = torch.cat(buffer['values'])
 
         advantage = returns - values
+        if self.normalize_advantage:
+            advantage = (advantage - advantage.mean()) / (advantage.std() + 1e-8)
 
         actor_loss = -(log_probs * advantage.detach()).mean()
-        critic_loss = advantage.pow(2).mean()
+        critic_loss = F.mse_loss(returns, values)
 
-        loss = actor_loss + self.value_loss_coef * critic_loss - self.entropy_coef * entropy
+        loss = actor_loss + self.value_loss_coef * critic_loss + self.entropy_coef * entropy
 
         self.optimizer.zero_grad()
         loss.backward()

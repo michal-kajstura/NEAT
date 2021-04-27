@@ -6,7 +6,7 @@ from stable_baselines3.common.env_util import make_vec_env
 from stable_baselines3.common.vec_env import DummyVecEnv
 
 from experiments.utils import _prepare_logging_dir
-from neat_improved.rl.a2c_new.trainer import A2CTrainer
+from neat_improved.rl.a2c.trainer import A2CTrainer
 
 EXPERIMENT_ENVS = [
     'CartPole-v0',
@@ -19,7 +19,7 @@ EXPERIMENT_ENVS = [
 USE_CUDA = True
 LOGGING_DIR = Path('./logs_actor_critic_nn')
 SEED = 2021
-ENV_NUM = 10
+ENV_NUM = 4
 ENV_WRAPPER_CLS = DummyVecEnv
 FORWARD_STEPS = 5
 TOTAL_STEPS = int(10e6)
@@ -33,7 +33,6 @@ for env_name in EXPERIMENT_ENVS:
     env = gym.make(env_name)
     logging_dir = _prepare_logging_dir(env, LOGGING_DIR)
 
-    # envs = make_env_vec(env_name=env_name, num_envs=ENV_NUM)
     envs = make_vec_env(env_id=env_name, seed=SEED, n_envs=ENV_NUM, monitor_dir=str(logging_dir),
                         vec_env_cls=ENV_WRAPPER_CLS)
 
