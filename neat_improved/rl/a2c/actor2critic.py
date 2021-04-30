@@ -9,32 +9,32 @@ class ActorCritic(nn.Module):
         super(ActorCritic, self).__init__()
 
         self._hidden_size = hidden_size
-        init_ = lambda m: init(
-            m,
-            nn.init.orthogonal_,
-            lambda x: nn.init.constant_(x, 0),
-            gain=np.sqrt(2),
-        )
-
-        init_value_ = lambda m: init(
-            m,
-            nn.init.orthogonal_,
-            lambda x: nn.init.constant_(x, 0),
-            gain=1,
-        )
 
         self.actor = nn.Sequential(
-            init_(nn.Linear(num_inputs, hidden_size)), nn.Tanh(),
-            init_(nn.Linear(hidden_size, hidden_size)), nn.Tanh(),
+            nn.Linear(num_inputs, hidden_size),
+            nn.Tanh(),
+            nn.Linear(hidden_size, hidden_size),
+            nn.Tanh(),
         )
 
         self.critic = nn.Sequential(
-            init_(nn.Linear(num_inputs, hidden_size)), nn.Tanh(),
-            init_(nn.Linear(hidden_size, hidden_size)), nn.Tanh(),
-            init_value_(nn.Linear(hidden_size, 1)),
+            nn.Linear(num_inputs, hidden_size),
+            nn.Tanh(),
+            nn.Linear(hidden_size, hidden_size),
+            nn.Tanh(),
+            nn.Linear(hidden_size, 1),
         )
 
-        self.train()
+        self.apply(self._init_weights)
+
+    @staticmethod
+    def _init_weights(layer):
+        if isinstance(layer, nn.Linear):
+            init(
+                layer,
+                nn.init.orthogonal_,
+                lambda x: nn.init.constant_(x, 0), np.sqrt(2),
+            )
 
     def forward(self, inputs):
         hidden_actor = self.actor(inputs)
