@@ -50,7 +50,12 @@ class A2CTrainer(BaseTrainer):
         self.gamma = gamma
         self.normalize_advantage = normalize_advantage
 
-        self.optimizer = optim.RMSprop(self.policy.parameters(), lr, eps=eps, alpha=alpha)
+        self.optimizer = optim.RMSprop(
+            self.policy.parameters(),
+            lr,
+            eps=eps,
+            alpha=alpha,
+        )
 
         self.reporters = reporters or ()
         self.critic_loss_func = critic_loss_func
@@ -59,7 +64,11 @@ class A2CTrainer(BaseTrainer):
         self.n_steps = n_steps
         self.mini_batch = self.n_steps * self.n_envs
 
-    def _train(self, iterations: Optional[int], stop_time: Optional[int]):
+    def _train(
+        self,
+        iterations: Optional[int] = None,
+        stop_time: Optional[int] = None,
+    ):
         start_time = time()
         iter_ = count() if iterations is None else range(1, iterations // self.mini_batch + 1)
 

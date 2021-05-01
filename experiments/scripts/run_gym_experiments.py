@@ -1,13 +1,12 @@
 import multiprocessing
 
-import gym
 import neat
 
 from experiments.utils import run_neat, run_actor_critic
 from neat_improved import NEAT_CONFIGS_PATH, PROJECT_PATH
 
 RUN_ACTOR_CRITIC = True
-RUN_NEAT = False
+RUN_NEAT = True
 
 STOP_TIME = 2 * 60
 N_REPEATS = 5
@@ -48,8 +47,6 @@ NEAT_LOGGING_DIR.mkdir(exist_ok=True)
 
 
 for env_name in experiments:
-    environment = gym.make(env_name)
-
     for _ in range(N_REPEATS):
         if RUN_NEAT:
             config = neat.Config(
@@ -60,8 +57,8 @@ for env_name in experiments:
                 str(NEAT_CONFIGS[env_name]),
             )
 
-            best_genome = run_neat(
-                environment,
+            run_neat(
+                env_name,
                 config,
                 num_generations=NUM_GENERATIONS,
                 stop_time=STOP_TIME,
@@ -71,7 +68,7 @@ for env_name in experiments:
 
         if RUN_ACTOR_CRITIC:
             run_actor_critic(
-                environment=environment,
+                environment_name=env_name,
                 num_iterations=MAX_EPISODES,
                 lr=LR,
                 gamma=GAMMA,

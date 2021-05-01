@@ -83,10 +83,11 @@ class CommonStemActorCritic(ActorCritic):
 
 
 class PolicyA2C(nn.Module):
-    def __init__(self, obs_shape, action_space):
+    def __init__(self, obs_shape, action_space, common_stem=False):
         super(PolicyA2C, self).__init__()
 
-        self.actor_critic = ActorCritic(num_inputs=obs_shape[0])
+        cls = CommonStemActorCritic if common_stem else ActorCritic
+        self.actor_critic = cls(num_inputs=obs_shape[0])
         self.dist = get_action_distribution(action_space, self.actor_critic.output_size)
 
     def forward(self, inputs):

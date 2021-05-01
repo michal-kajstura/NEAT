@@ -3,15 +3,19 @@ from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
+import gym
 from gym import Env
 from neat import Config, StatisticsReporter, StdOutReporter
 from neat.nn import FeedForwardNetwork
+from stable_baselines3.common.env_util import make_vec_env
+from stable_baselines3.common.vec_env import DummyVecEnv
 
 from neat_improved.neat.action_handler import handle_action
 from neat_improved.neat.evaluator import MultipleRunGymEvaluator
 from neat_improved.neat.reporters import FileReporter
 from neat_improved.neat.trainer import NEATRunner
-from neat_improved.rl.reporters import StdRLReporter, FileRLReporter
+from neat_improved.rl.actor_critic.a2c import PolicyA2C
+from neat_improved.rl.actor_critic.trainer import A2CTrainer
 
 
 def render_result(
@@ -37,7 +41,7 @@ def render_result(
 
 
 def run_neat(
-    environment: Env,
+    environment_name: str,
     config: Config,
     num_generations: Optional[int],
     stop_time: Optional[int],
@@ -45,7 +49,9 @@ def run_neat(
     runs_per_network: int = 1,
     max_steps: int = 1000,
     logging_root: Optional[Path] = None,
+    seed: int = 2021,
 ):
+    environment = gym.make(environment_name)
     evaluator = MultipleRunGymEvaluator(
         environment=environment,
         max_steps=max_steps,
@@ -53,7 +59,7 @@ def run_neat(
     )
 
     logging_dir = _prepare_logging_dir(
-        environment,
+        environment_name,
         logging_root or Path('./logs'),
     )
 
@@ -65,6 +71,7 @@ def run_neat(
                 'num_workers': num_workers,
                 'runs_per_network': runs_per_network,
                 'max_steps': max_steps,
+                'seed': seed,
             },
             file,
             indent=4,
@@ -81,18 +88,16 @@ def run_neat(
         num_workers=num_workers,
     )
 
-    best_genome = runner.train(num_generations, stop_time)
-    return best_genome
+    runner.train(num_generations, stop_time)
 
 
 def _prepare_logging_dir(
-    environment: Env,
+    env_name: str,
     root: Path,
 ) -> Path:
     now = datetime.now()
     time = now.strftime('%Y-%m-%d %H:%M:%S')
 
-    env_name = environment.spec._env_name
     logging_dir = root / env_name / time
     logging_dir.mkdir(exist_ok=True, parents=True)
 
@@ -100,15 +105,18 @@ def _prepare_logging_dir(
 
 
 def run_actor_critic(
-    environment: Env,
+    environment_name: str,
     num_iterations: Optional[int],
     lr: float,
     gamma: float,
     stop_time: Optional = None,
     use_gpu: bool = True,
     logging_root: Optional[Path] = None,
+    normalize_advantage: bool = False,
+    value_loss_coef: float = 0.5,
+    seed=2021,
 ):
-    logging_dir = _prepare_logging_dir(environment, logging_root or Path('./ac_results'))
+    logging_dir = _prepare_logging_dir(environment_name, logging_root or Path('./ac_results'))
 
     with (logging_dir / 'hyperparameters.json').open('w') as file:
         json.dump(
@@ -117,33 +125,37 @@ def run_actor_critic(
                 'stop_time': stop_time,
                 'lr': lr,
                 'gamma': gamma,
+                'normalize_advantage': normalize_advantage,
+                'value_loss_coef': value_loss_coef,
                 'use_gpu': use_gpu,
+                'seed': seed,
             },
             file,
             indent=4,
         )
 
-    state_size = environment.observation_space.shape[0]
-
-    trainer = ActorCriticTrainer(
-        env=environment,
-        actor_critic=ActorCritic(
-            state_size=state_size,
-            action_space=environment.action_space,
-            fit_domain_strategy='tanh',
-        ),
-        render=False,
-        lr=lr,
-        gamma=gamma,
-        save_dir=logging_dir,
-        reporters=(
-            StdRLReporter(
-                log_once_every=10,
-            ),
-            FileRLReporter(
-                save_dir_path=logging_dir,
-            ),
-        ),
-        use_gpu=use_gpu,
+    envs = make_vec_env(
+        env_id=environment_name,
+        seed=seed,
+        n_envs=5,
+        monitor_dir=str(logging_dir),
+        vec_env_cls=DummyVecEnv,
     )
-    trainer.train(num_iterations, stop_time)
+
+    policy = PolicyA2C(
+        envs.observation_space.shape,
+        envs.action_space,
+        common_stem=False,
+    )
+    trainer = A2CTrainer(
+        policy=policy,
+        vec_envs=envs,
+        n_steps=5,
+        use_gpu=use_gpu,
+        log_interval=10,
+        value_loss_coef=value_loss_coef,
+        lr=lr,
+        normalize_advantage=normalize_advantage,
+    )
+
+    trainer.train(stop_time=stop_time, iterations=num_iterations,)
