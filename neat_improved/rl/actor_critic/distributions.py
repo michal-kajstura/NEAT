@@ -1,11 +1,7 @@
 import torch
 from torch import nn
 
-from neat_improved.rl.a2c.utils import init
-
-"""
-Modify standard PyTorch distributions so they are compatible with this code.
-"""
+from neat_improved.rl.actor_critic.utils import init
 
 
 #  categorical probability distribution (Discrete spaces)
@@ -98,3 +94,16 @@ class AddBias(nn.Module):
             bias = self._bias.t().view(1, -1, 1, 1)
 
         return x + bias
+
+
+def get_action_distribution(action_space, in_features: int):
+    if action_space.__class__.__name__ == "Discrete":
+        num_outputs = action_space.n
+        dist = Categorical(in_features, num_outputs)
+    elif action_space.__class__.__name__ == "Box":
+        num_outputs = action_space.shape[0]
+        dist = DiagGaussian(in_features, num_outputs)
+    else:
+        raise NotImplementedError
+
+    return dist

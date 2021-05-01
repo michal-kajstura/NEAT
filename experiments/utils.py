@@ -11,7 +11,6 @@ from neat_improved.neat.action_handler import handle_action
 from neat_improved.neat.evaluator import MultipleRunGymEvaluator
 from neat_improved.neat.reporters import FileReporter
 from neat_improved.neat.trainer import NEATRunner
-from neat_improved.rl.actor_critic.michal_actor_critic import ActorCritic, ActorCriticTrainer
 from neat_improved.rl.reporters import StdRLReporter, FileRLReporter
 
 
