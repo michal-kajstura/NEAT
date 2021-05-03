@@ -1,0 +1,8 @@
+{
+    "max_frames": 500000,
+    "stop_time": null,
+    "num_workers": 12,
+    "runs_per_network": 1,
+    "max_steps": 1000,
+    "seed": 2023
+}

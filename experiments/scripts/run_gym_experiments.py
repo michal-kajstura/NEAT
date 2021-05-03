@@ -6,7 +6,7 @@ from typing import Union
 import numpy as np
 import torch
 
-from experiments.utils import run_neat, run_actor_critic
+from experiments.utils import run_neat, run_actor_critic, run_baseline_actor_critic
 from neat_improved import PROJECT_PATH
 
 RUN_ACTOR_CRITIC = True
@@ -14,7 +14,7 @@ RUN_NEAT = True
 SEED = 2021
 
 STOP_TIME = None
-MAX_FRAMES = int(5e6)
+MAX_FRAMES = int(1e6) // 2
 N_REPEATS = 3
 
 LOGGING_DIR = PROJECT_PATH.parent / 'logs_neat_vs_rl'
@@ -51,9 +51,14 @@ class A2CExperimentConfig:
     name: str = 'ac'
 
 
+@dataclass
+class BaselineA2CExperimentConfig:
+    name: str = 'baseline_a2c'
+
+
 def run_experiment(
     env_name: str,
-    experiment: Union[NEATExperimentConfig, A2CExperimentConfig],
+    experiment: Union[NEATExperimentConfig, A2CExperimentConfig, BaselineA2CExperimentConfig],
     seed: int,
 ):
     np.random.seed(seed)
@@ -83,12 +88,21 @@ def run_experiment(
             value_loss_coef=experiment.value_loss_coef,
             seed=seed,
         )
+    elif isinstance(experiment, BaselineA2CExperimentConfig):
+        run_baseline_actor_critic(
+            environment_name=env_name,
+            max_frames=MAX_FRAMES,
+            logging_dir=LOGGING_DIR / experiment.name,
+        )
+    else:
+        raise ValueError()
 
 
 experiment_configs = (
+    # BaselineA2CExperimentConfig(),
     NEATExperimentConfig(name='neat'),
     A2CExperimentConfig(name='a2c'),
-    A2CExperimentConfig(common_stem=True, name='ac_common_stem'),
+    # A2CExperimentConfig(common_stem=True, name='ac_common_stem'),
     # A2CExperimentConfig(common_stem=True, value_loss_coef=0.1),
     # A2CExperimentConfig(normalize_advantage=False),
     # A2CExperimentConfig(lr=7e-3),

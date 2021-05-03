@@ -4,9 +4,12 @@ from pathlib import Path
 from typing import Optional
 
 import neat
+import torch
 from gym import Env
 from neat import StdOutReporter
 from neat.nn import FeedForwardNetwork
+from stable_baselines3 import A2C
+from stable_baselines3.a2c import MlpPolicy
 from stable_baselines3.common.env_util import make_vec_env
 from stable_baselines3.common.vec_env import SubprocVecEnv
 
@@ -16,6 +19,7 @@ from neat_improved.neat.evaluator import MultipleRunGymEvaluator
 from neat_improved.neat.reporters import FileReporter
 from neat_improved.neat.trainer import NEATRunner
 from neat_improved.rl.actor_critic.a2c import PolicyA2C
+from neat_improved.rl.actor_critic.callbacks import CustomCallback
 from neat_improved.rl.actor_critic.trainer import A2CTrainer
 from neat_improved.rl.reporters import FileRLReporter
 
@@ -173,3 +177,28 @@ def run_actor_critic(
         stop_time=stop_time,
         num_frames=max_frames,
     )
+
+
+def run_baseline_actor_critic(
+    environment_name: str,
+    max_frames: Optional[int],
+    logging_dir: Path,
+    seed=2021,
+):
+    logging_dir = prepare_logging_dir(environment_name, logging_dir)
+
+    envs = make_vec_env(
+        env_id=environment_name,
+        seed=seed,
+        n_envs=5,
+        monitor_dir=str(logging_dir),
+    )
+
+    a2c = A2C(
+        policy=MlpPolicy,
+        env=envs,
+        verbose=1,
+        device=torch.device('cuda'),
+    )
+    a2c.learn(max_frames, callback=CustomCallback(logging_dir))
+

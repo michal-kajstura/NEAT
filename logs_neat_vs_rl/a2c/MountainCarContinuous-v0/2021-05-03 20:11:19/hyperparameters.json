@@ -1,0 +1,11 @@
+{
+    "max_frames": 500000,
+    "stop_time": null,
+    "lr": 0.0007,
+    "gamma": 0.99,
+    "normalize_advantage": false,
+    "value_loss_coef": 0.5,
+    "common_stem": false,
+    "use_gpu": true,
+    "seed": 2021
+}
