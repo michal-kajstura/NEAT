@@ -1,7 +1,7 @@
 import abc
-from typing import Optional
+from typing import Optional, Tuple
 
-import numpy as np
+import gym
 from gym import Env
 from neat import Config, DefaultGenome
 from neat.nn import FeedForwardNetwork
@@ -12,43 +12,73 @@ from neat_improved.neat.action_handler import handle_action
 class GymEvaluator(abc.ABC):
     def __init__(
         self,
-        environment: Env,
+        environment_name: str,
         render: bool = False,
     ):
-        self._environment = environment
+        self._environment_name = environment_name
         self._render = render
+
+    @property
+    @abc.abstractmethod
+    def num_frames(self) -> int:
+        pass
+
+    @num_frames.setter
+    @abc.abstractmethod
+    def num_frames(self, i):
+        pass
 
     @abc.abstractmethod
     def evaluate(
         self,
         genome: DefaultGenome,
         config: Config,
-    ) -> float:
+    ) -> Tuple[float, int]:
         pass
 
 
 class MultipleRunGymEvaluator(GymEvaluator):
     def __init__(
         self,
-        environment: Env,
+        environment_name: str,
         runs_per_network: int = 1,
         max_steps: Optional[int] = None,
         render: bool = False,
     ):
-        super().__init__(environment=environment, render=render)
+        super().__init__(
+            environment_name=environment_name,
+            render=render,
+        )
         self._runs_per_network = runs_per_network
         self._max_steps = max_steps or float('inf')
+        self._num_frames = 0
 
-    def evaluate(self, genome: DefaultGenome, config: Config) -> float:
+    @property
+    def num_frames(self):
+        return self._num_frames
+
+    @num_frames.setter
+    def num_frames(self, i):
+        self._num_frames = i
+
+    def evaluate(self, genome: DefaultGenome, config: Config) -> Tuple[float, int]:
         network = FeedForwardNetwork.create(genome, config)
-        fitness_scores = [self._run_episode(network) for _ in range(self._runs_per_network)]
-        return np.mean(fitness_scores)
+        environment = gym.make(self._environment_name)
+
+        fitness, frames = 0., 0
+        for _ in range(self._runs_per_network):
+            fit, fr = self._run_episode(network, environment)
+            fitness += fit
+            frames += fr
+
+        return fitness / self._runs_per_network, frames
 
     def _run_episode(
         self,
         network: FeedForwardNetwork,
-    ) -> float:
-        observation = self._environment.reset()
+        environment: Env,
+    ) -> Tuple[float, int]:
+        observation = environment.reset()
 
         fitness = 0.0
         done = False
@@ -58,9 +88,9 @@ class MultipleRunGymEvaluator(GymEvaluator):
                 break
 
             output = network.activate(observation)
-            action = handle_action(output, self._environment)
-            observation, reward, done, _ = self._environment.step(action)
+            action = handle_action(output, environment)
+            observation, reward, done, _ = environment.step(action)
             fitness += reward
             step += 1
 
-        return fitness
+        return fitness, step

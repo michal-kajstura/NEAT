@@ -1,11 +1,7 @@
 import torch
 from torch import nn
 
-from neat_improved.rl.a2c.utils import init
-
-"""
-Modify standard PyTorch distributions so they are compatible with this code.
-"""
+from neat_improved.rl.actor_critic.utils import init
 
 
 #  categorical probability distribution (Discrete spaces)
@@ -14,7 +10,7 @@ class CategoricalPdType(torch.distributions.Categorical):
         return super().sample().unsqueeze(-1)
 
     def log_probs(self, actions):
-        return super().log_prob(actions)
+        return super().log_prob(actions.squeeze(-1)).view(actions.size(0), -1).sum(-1).unsqueeze(-1)
 
     def mode(self):
         return self.probs.argmax(dim=-1, keepdim=True)
@@ -33,12 +29,7 @@ class Categorical(nn.Module):
     def __init__(self, num_inputs, num_outputs):
         super(Categorical, self).__init__()
 
-        init_ = lambda m: init(
-            m,
-            nn.init.orthogonal_,
-            lambda x: nn.init.constant_(x, 0),
-            gain=0.01
-        )
+        init_ = lambda m: init(m, nn.init.orthogonal_, lambda x: nn.init.constant_(x, 0), gain=0.01)
 
         self.linear = init_(nn.Linear(num_inputs, num_outputs))
 
@@ -66,12 +57,7 @@ class DiagGaussian(nn.Module):
     def __init__(self, num_inputs, num_outputs):
         super(DiagGaussian, self).__init__()
 
-        init_ = lambda m: init(
-            m,
-            nn.init.orthogonal_,
-            lambda x: nn.init.constant_(x, 0),
-            gain=0.01
-        )
+        init_ = lambda m: init(m, nn.init.orthogonal_, lambda x: nn.init.constant_(x, 0))
 
         self.fc_mean = init_(nn.Linear(num_inputs, num_outputs))
         self.logstd = AddBias(torch.zeros(num_outputs))
@@ -98,3 +84,16 @@ class AddBias(nn.Module):
             bias = self._bias.t().view(1, -1, 1, 1)
 
         return x + bias
+
+
+def get_action_distribution(action_space, in_features: int):
+    if action_space.__class__.__name__ == "Discrete":
+        num_outputs = action_space.n
+        dist = Categorical(in_features, num_outputs)
+    elif action_space.__class__.__name__ == "Box":
+        num_outputs = action_space.shape[0]
+        dist = DiagGaussian(in_features, num_outputs)
+    else:
+        raise NotImplementedError
+
+    return dist

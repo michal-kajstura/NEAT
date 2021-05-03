@@ -3,16 +3,21 @@ from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
+import neat
 from gym import Env
-from neat import Config, StatisticsReporter, StdOutReporter
+from neat import StdOutReporter
 from neat.nn import FeedForwardNetwork
+from stable_baselines3.common.env_util import make_vec_env
+from stable_baselines3.common.vec_env import SubprocVecEnv
 
+from neat_improved.neat import NEAT_CONFIGS
 from neat_improved.neat.action_handler import handle_action
 from neat_improved.neat.evaluator import MultipleRunGymEvaluator
 from neat_improved.neat.reporters import FileReporter
 from neat_improved.neat.trainer import NEATRunner
-from neat_improved.rl.actor_critic.michal_actor_critic import ActorCritic, ActorCriticTrainer
-from neat_improved.rl.reporters import StdRLReporter, FileRLReporter
+from neat_improved.rl.actor_critic.a2c import PolicyA2C
+from neat_improved.rl.actor_critic.trainer import A2CTrainer
+from neat_improved.rl.reporters import FileRLReporter
 
 
 def render_result(
@@ -38,34 +43,40 @@ def render_result(
 
 
 def run_neat(
-    environment: Env,
-    config: Config,
-    num_generations: Optional[int],
+    environment_name: str,
+    max_frames: Optional[int],
     stop_time: Optional[int],
+    logging_dir: Path,
     num_workers: Optional[int] = None,
     runs_per_network: int = 1,
     max_steps: int = 1000,
-    logging_root: Optional[Path] = None,
+    seed: int = 2021,
 ):
+    logging_dir = prepare_logging_dir(environment_name, logging_dir)
+    config = neat.Config(
+        neat.DefaultGenome,
+        neat.DefaultReproduction,
+        neat.DefaultSpeciesSet,
+        neat.DefaultStagnation,
+        str(NEAT_CONFIGS[environment_name]),
+    )
+
     evaluator = MultipleRunGymEvaluator(
-        environment=environment,
+        environment_name=environment_name,
         max_steps=max_steps,
         runs_per_network=runs_per_network,
     )
 
-    logging_dir = _prepare_logging_dir(
-        environment,
-        logging_root or Path('./logs'),
-    )
 
     with (logging_dir / 'hyperparameters.json').open('w') as file:
         json.dump(
             {
-                'num_generations': num_generations,
+                'max_frames': max_frames,
                 'stop_time': stop_time,
                 'num_workers': num_workers,
                 'runs_per_network': runs_per_network,
                 'max_steps': max_steps,
+                'seed': seed,
             },
             file,
             indent=4,
@@ -75,25 +86,23 @@ def run_neat(
         config=config,
         evaluator=evaluator,
         reporters=[
-            StatisticsReporter(),
+            # StatisticsReporter(),
             StdOutReporter(show_species_detail=False),
-            FileReporter(save_dir_path=logging_dir),
+            FileReporter(save_dir_path=logging_dir, evaluator=evaluator),
         ],
         num_workers=num_workers,
     )
 
-    best_genome = runner.train(num_generations, stop_time)
-    return best_genome
+    runner.train(max_frames, stop_time)
 
 
-def _prepare_logging_dir(
-    environment: Env,
+def prepare_logging_dir(
+    env_name: str,
     root: Path,
 ) -> Path:
     now = datetime.now()
     time = now.strftime('%Y-%m-%d %H:%M:%S')
 
-    env_name = environment.spec._env_name
     logging_dir = root / env_name / time
     logging_dir.mkdir(exist_ok=True, parents=True)
 
@@ -101,50 +110,66 @@ def _prepare_logging_dir(
 
 
 def run_actor_critic(
-    environment: Env,
-    num_iterations: Optional[int],
+    environment_name: str,
+    max_frames: Optional[int],
     lr: float,
     gamma: float,
+    logging_dir: Path,
     stop_time: Optional = None,
     use_gpu: bool = True,
-    logging_root: Optional[Path] = None,
+    normalize_advantage: bool = False,
+    value_loss_coef: float = 0.5,
+    entropy_coef: float = 0.01,
+    common_stem: bool = False,
+    seed=2021,
 ):
-    logging_dir = _prepare_logging_dir(environment, logging_root or Path('./ac_results'))
 
+    logging_dir = prepare_logging_dir(environment_name, logging_dir)
     with (logging_dir / 'hyperparameters.json').open('w') as file:
         json.dump(
             {
-                'num_iterations': num_iterations,
+                'max_frames': max_frames,
                 'stop_time': stop_time,
                 'lr': lr,
                 'gamma': gamma,
+                'normalize_advantage': normalize_advantage,
+                'value_loss_coef': value_loss_coef,
+                'common_stem': common_stem,
                 'use_gpu': use_gpu,
+                'seed': seed,
             },
             file,
             indent=4,
         )
 
-    state_size = environment.observation_space.shape[0]
-
-    trainer = ActorCriticTrainer(
-        env=environment,
-        actor_critic=ActorCritic(
-            state_size=state_size,
-            action_space=environment.action_space,
-            fit_domain_strategy='tanh',
-        ),
-        render=False,
-        lr=lr,
-        gamma=gamma,
-        save_dir=logging_dir,
-        reporters=(
-            StdRLReporter(
-                log_once_every=10,
-            ),
-            FileRLReporter(
-                save_dir_path=logging_dir,
-            ),
-        ),
-        use_gpu=use_gpu,
+    envs = make_vec_env(
+        env_id=environment_name,
+        seed=seed,
+        n_envs=5,
+        monitor_dir=str(logging_dir),
+        # vec_env_cls=DummyVecEnv,
+        vec_env_cls=SubprocVecEnv,
     )
-    trainer.train(num_iterations, stop_time)
+
+    policy = PolicyA2C(
+        envs.observation_space.shape,
+        envs.action_space,
+        common_stem=common_stem,
+    )
+    trainer = A2CTrainer(
+        policy=policy,
+        vec_envs=envs,
+        n_steps=5,
+        use_gpu=use_gpu,
+        log_interval=10,
+        value_loss_coef=value_loss_coef,
+        lr=lr,
+        normalize_advantage=normalize_advantage,
+        entropy_coef=entropy_coef,
+        reporters=(FileRLReporter(save_dir_path=logging_dir),),
+    )
+
+    trainer.train(
+        stop_time=stop_time,
+        num_frames=max_frames,
+    )
