@@ -1,4 +1,3 @@
-import abc
 import csv
 from contextlib import contextmanager
 from pathlib import Path
@@ -7,27 +6,31 @@ from typing import Iterator
 
 from neat.reporting import BaseReporter
 
+from neat_improved.neat.evaluator import GymEvaluator
+
 _SPECIES = 'species'
 _POPULATION = 'population'
 _FIELDS = {
     _SPECIES: (
         'iteration',
+        'num_frames',
+        'time_in_s',
         'species_id',
         'size',
         'age',
         'stagnation',
         'fitness',
         'adjusted_fitness',
-        'time_in_s',
     ),
     _POPULATION: (
         'iteration',
+        'num_frames',
+        'time_in_s',
         'individual_id',
         'species_id',
         'fitness',
         'num_nodes',
         'num_connections',
-        'time_in_s',
     ),
 }
 
@@ -36,7 +39,9 @@ class FileReporter(BaseReporter):
     def __init__(
         self,
         save_dir_path: Path,
+        evaluator: GymEvaluator,
     ):
+        self.evaluator = evaluator
         self.generation = 0
         self.start_time = None
         self.save_dir_path = save_dir_path
@@ -72,6 +77,7 @@ class FileReporter(BaseReporter):
                         'fitness': individual.fitness,
                         'num_nodes': len(individual.nodes),
                         'num_connections': len(individual.connections),
+                        'num_frames': self.evaluator.num_frames,
                         'time_in_s': time() - self.start_time,
                     }
                 )
@@ -87,6 +93,7 @@ class FileReporter(BaseReporter):
                         'stagnation': self.generation - specie.last_improved,
                         'fitness': specie.fitness,
                         'adjusted_fitness': specie.adjusted_fitness,
+                        'num_frames': self.evaluator.num_frames,
                         'time_in_s': time() - self.start_time,
                     }
                 )

@@ -7,7 +7,7 @@ from gym.spaces import Box
 from stable_baselines3.common.env_util import make_vec_env
 from stable_baselines3.common.vec_env import DummyVecEnv
 
-from experiments.utils import _prepare_logging_dir
+from experiments.utils import prepare_logging_dir
 from neat_improved.rl.actor_critic.a2c import PolicyA2C
 from neat_improved.rl.actor_critic.trainer import A2CTrainer
 
@@ -34,7 +34,7 @@ torch.set_num_threads(1)
 
 for env_name in EXPERIMENT_ENVS:
     env = gym.make(env_name)
-    logging_dir = _prepare_logging_dir(env, LOGGING_DIR)
+    logging_dir = prepare_logging_dir(env, LOGGING_DIR)
 
     envs = make_vec_env(
         env_id=env_name,
@@ -60,7 +60,7 @@ for env_name in EXPERIMENT_ENVS:
         normalize_advantage=False,
     )
 
-    trainer.train(stop_time=60 * 2, iterations=None)
+    trainer.train(stop_time=60 * 2, num_frames=None)
 
     device = torch.device('cuda')
     policy = trainer.policy

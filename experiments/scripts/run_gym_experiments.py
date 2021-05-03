@@ -1,78 +1,103 @@
 import multiprocessing
+import random
+from dataclasses import dataclass
+from typing import Union
 
-import neat
+import numpy as np
+import torch
 
 from experiments.utils import run_neat, run_actor_critic
-from neat_improved import NEAT_CONFIGS_PATH, PROJECT_PATH
+from neat_improved import PROJECT_PATH
 
 RUN_ACTOR_CRITIC = True
 RUN_NEAT = True
+SEED = 2021
 
-STOP_TIME = 2 * 60
-N_REPEATS = 5
+STOP_TIME = None
+MAX_FRAMES = int(5e6)
+N_REPEATS = 3
 
-LOGGING_DIR = PROJECT_PATH / 'logs2'
+LOGGING_DIR = PROJECT_PATH.parent / 'logs_neat_vs_rl'
 LOGGING_DIR.mkdir(exist_ok=True)
 
-experiments = (
-    'CartPole-v0',
+enviroments = (
     'LunarLander-v2',
     'MountainCarContinuous-v0',
     'BipedalWalker-v3',
+    'BipedalWalkerHardcore-v3',
     'Pendulum-v0',
+    'CartPole-v0',
 )
 
-# Actor Critic stuff
-MAX_EPISODES = None
-LR = 0.005
-GAMMA = 0.99
-USE_GPU = True  # probably should be set to False
-ACTOR_CRITIC_LOGGING_DIR = LOGGING_DIR / 'actor_critic'
-ACTOR_CRITIC_LOGGING_DIR.mkdir(exist_ok=True)
-
-
-# NEAT stuff
-NEAT_CONFIGS = {
-    'LunarLander-v2': NEAT_CONFIGS_PATH / 'config-lunar-lander-v2',
-    'BipedalWalker-v3': NEAT_CONFIGS_PATH / 'config-bipedal-walker-v3',
-    'CartPole-v0': NEAT_CONFIGS_PATH / 'config-cart-pole-v0',
-    'MountainCarContinuous-v0': NEAT_CONFIGS_PATH / 'config-mountain-car-continous-v0',
-    'Pendulum-v0': NEAT_CONFIGS_PATH / 'config-pendulum-v0',
-}
+USE_GPU = True
 NUM_GENERATIONS = None
-NUM_WORKERS = multiprocessing.cpu_count()  # probably should be set to 1
-NUM_REPEATS = 1
-NEAT_LOGGING_DIR = LOGGING_DIR / 'neat'
-NEAT_LOGGING_DIR.mkdir(exist_ok=True)
+NUM_WORKERS = multiprocessing.cpu_count()
 
 
-for env_name in experiments:
-    for _ in range(N_REPEATS):
-        if RUN_NEAT:
-            config = neat.Config(
-                neat.DefaultGenome,
-                neat.DefaultReproduction,
-                neat.DefaultSpeciesSet,
-                neat.DefaultStagnation,
-                str(NEAT_CONFIGS[env_name]),
-            )
+@dataclass
+class NEATExperimentConfig:
+    runs_per_network: int = 1
+    name: str = 'neat'
 
-            run_neat(
-                env_name,
-                config,
-                num_generations=NUM_GENERATIONS,
-                stop_time=STOP_TIME,
-                num_workers=NUM_WORKERS,
-                logging_root=NEAT_LOGGING_DIR,
-            )
 
-        if RUN_ACTOR_CRITIC:
-            run_actor_critic(
-                environment_name=env_name,
-                num_iterations=MAX_EPISODES,
-                lr=LR,
-                gamma=GAMMA,
-                stop_time=STOP_TIME,
-                use_gpu=USE_GPU,
-                logging_root=ACTOR_CRITIC_LOGGING_DIR,
-            )
+@dataclass
+class A2CExperimentConfig:
+    lr: float = 7e-4
+    gamma: float = 0.99
+    normalize_advantage: bool = False
+    value_loss_coef: float = 0.5
+    entropy_coef: float = 0.01,
+    common_stem: bool = False
+    name: str = 'ac'
+
+
+def run_experiment(
+    env_name: str,
+    experiment: Union[NEATExperimentConfig, A2CExperimentConfig],
+    seed: int,
+):
+    np.random.seed(seed)
+    torch.random.manual_seed(seed)
+    random.seed(seed)
+
+    if isinstance(experiment, NEATExperimentConfig):
+        run_neat(
+            env_name,
+            max_frames=MAX_FRAMES,
+            stop_time=STOP_TIME,
+            num_workers=NUM_WORKERS,
+            logging_dir=LOGGING_DIR / experiment.name,
+            runs_per_network=experiment.runs_per_network,
+            seed=seed,
+        )
+    elif isinstance(experiment, A2CExperimentConfig):
+        run_actor_critic(
+            environment_name=env_name,
+            max_frames=MAX_FRAMES,
+            stop_time=STOP_TIME,
+            logging_dir=LOGGING_DIR / experiment.name,
+            use_gpu=USE_GPU,
+            lr=experiment.lr,
+            gamma=experiment.gamma,
+            normalize_advantage=experiment.normalize_advantage,
+            value_loss_coef=experiment.value_loss_coef,
+            seed=seed,
+        )
+
+
+experiment_configs = (
+    NEATExperimentConfig(name='neat'),
+    A2CExperimentConfig(name='a2c'),
+    A2CExperimentConfig(common_stem=True, name='ac_common_stem'),
+    # A2CExperimentConfig(common_stem=True, value_loss_coef=0.1),
+    # A2CExperimentConfig(normalize_advantage=False),
+    # A2CExperimentConfig(lr=7e-3),
+    # A2CExperimentConfig(entropy_coef=0.1),
+    # A2CExperimentConfig(entropy_coef=0.001),
+)
+
+if __name__ == '__main__':
+    for config in experiment_configs:
+        for env_name in enviroments:
+            for repeat in range(N_REPEATS):
+                run_experiment(env_name, config, seed=SEED + repeat)

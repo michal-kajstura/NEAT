@@ -29,7 +29,7 @@ class A2CTrainer(BaseTrainer):
         gamma: float = 0.99,
         value_loss_coef: float = 0.5,
         entropy_coef: float = 0.01,
-        log_interval: int = 10,
+        log_interval: int = 10000,
         normalize_advantage: bool = False,
         use_gpu: bool = True,
         critic_loss_func: Callable = F.mse_loss,
@@ -64,13 +64,15 @@ class A2CTrainer(BaseTrainer):
         self.n_steps = n_steps
         self.mini_batch = self.n_steps * self.n_envs
 
+        self._num_frames = 0
+
     def _train(
         self,
-        iterations: Optional[int] = None,
+        num_frames: Optional[int] = None,
         stop_time: Optional[int] = None,
     ):
         start_time = time()
-        iter_ = count() if iterations is None else range(1, iterations // self.mini_batch + 1)
+        iter_ = count()
 
         state = self.vec_envs.reset()
         fitness_scores = [0] * self.vec_envs.num_envs
@@ -78,6 +80,9 @@ class A2CTrainer(BaseTrainer):
         fitness = 0.0
         for update in iter_:
             if stop_time and (time() - start_time) >= stop_time:
+                break
+
+            if self._num_frames and (self._num_frames >= num_frames):
                 break
 
             (
@@ -96,17 +101,16 @@ class A2CTrainer(BaseTrainer):
 
             self._call_reporters(
                 'on_update_end',
+                iteration=update,
                 fitness=fitness,
-                entropy=entropy,
-                actor_loss=actor_loss,
-                critic_loss=critic_loss,
-                policy_loss=policy_loss,
+                policy_loss=policy_loss.item(),
+                num_frames=self._num_frames,
             )
 
             # Calculate the fps (frame per second)
             fps = int((update * self.mini_batch) / n_seconds)
 
-            if update % self.log_interval == 0 or update == 1:
+            if (update % self.log_interval) == 0 or update == 1:
                 ev = explained_variance(values, returns)
 
                 total_num_steps = (update + 1) * self.n_envs * self.n_steps
@@ -147,6 +151,8 @@ class A2CTrainer(BaseTrainer):
                 else:
                     episode_end_fitness_scores.append(fitness_scores[i])
                     fitness_scores[i] = 0.0
+
+            self._num_frames += self.vec_envs.num_envs
 
             buffer['log_probs'].append(action_log_probs)
             buffer['values'].append(critic_values)

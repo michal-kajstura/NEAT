@@ -5,14 +5,11 @@ from time import time
 from typing import Iterator
 
 _NAME = 'actor_critic'
-_FIELDS = 'iteration', 'fitness', 'time_in_s'
+_FIELDS = 'iteration', 'num_frames', 'time_in_s', 'fitness', 'loss'
 
 
 class BaseRLReporter:
-    def on_episode_start(self, *args, **kwargs):
-        pass
-
-    def on_episode_end(self, *args, **kwargs):
+    def on_update_end(self, *args, **kwargs):
         pass
 
 
@@ -26,6 +23,9 @@ class FileRLReporter(BaseRLReporter):
         self.save_dir_path.mkdir(exist_ok=True, parents=True)
         self.start_time = None
 
+        with self._get_writer(_NAME, _FIELDS, 'w') as file:
+            file.writeheader()
+
     @contextmanager
     def _get_writer(self, filename, fieldnames, mode) -> Iterator[csv.DictWriter]:
         file = (self.save_dir_path / (filename + '.csv')).open(mode)
@@ -34,7 +34,14 @@ class FileRLReporter(BaseRLReporter):
         finally:
             file.close()
 
-    def on_episode_end(self, iteration: int, fitness: float):
+    def on_update_end(
+        self,
+        iteration,
+        num_frames,
+        fitness,
+        policy_loss,
+        **kwargs,
+    ):
         if self.start_time is None:
             self.start_time = time()
 
@@ -42,7 +49,9 @@ class FileRLReporter(BaseRLReporter):
             writer.writerow(
                 {
                     'iteration': iteration,
+                    'num_frames': num_frames,
                     'fitness': fitness,
+                    'loss': policy_loss,
                     'time_in_s': time() - self.start_time,
                 }
             )
@@ -56,11 +65,19 @@ class StdRLReporter(BaseRLReporter):
         self.start_time = None
         self.log_once_every = log_once_every
 
-    def on_episode_end(self, iteration: int, fitness: float):
+    def on_update_end(
+        self,
+        iteration,
+        num_frames,
+        fitness,
+        policy_loss,
+        **kwargs,
+    ):
         if self.start_time is None:
             self.start_time = time()
 
         if (iteration % self.log_once_every) == 0:
             print(
                 f'iteration: {iteration}, fitness: {fitness}, time: {time() - self.start_time:.2f}s'
+                f' loss: {policy_loss}'
             )
