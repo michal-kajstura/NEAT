@@ -27,6 +27,7 @@ ENV_WRAPPER_CLS = DummyVecEnv
 FORWARD_STEPS = 5
 TOTAL_STEPS = int(10e6)
 LOG_INTERVAL = 100
+USE_SCHEDULER = True
 
 torch.manual_seed(SEED)
 torch.cuda.manual_seed_all(SEED)
@@ -34,7 +35,7 @@ torch.set_num_threads(1)
 
 for env_name in EXPERIMENT_ENVS:
     env = gym.make(env_name)
-    logging_dir = prepare_logging_dir(env, LOGGING_DIR)
+    logging_dir = prepare_logging_dir(env_name, LOGGING_DIR)
 
     envs = make_vec_env(
         env_id=env_name,
@@ -57,6 +58,7 @@ for env_name in EXPERIMENT_ENVS:
         log_interval=LOG_INTERVAL,
         value_loss_coef=0.25,
         lr=7e-4,
+        use_scheduler=USE_SCHEDULER,
         normalize_advantage=False,
     )
 

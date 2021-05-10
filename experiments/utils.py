@@ -21,9 +21,9 @@ from neat_improved.rl.reporters import FileRLReporter
 
 
 def render_result(
-    environment: Env,
-    network: FeedForwardNetwork,
-    steps: int = 500,
+        environment: Env,
+        network: FeedForwardNetwork,
+        steps: int = 500,
 ):
     frames = []
     observation = environment.reset()
@@ -43,14 +43,14 @@ def render_result(
 
 
 def run_neat(
-    environment_name: str,
-    max_frames: Optional[int],
-    stop_time: Optional[int],
-    logging_dir: Path,
-    num_workers: Optional[int] = None,
-    runs_per_network: int = 1,
-    max_steps: int = 1000,
-    seed: int = 2021,
+        environment_name: str,
+        max_frames: Optional[int],
+        stop_time: Optional[int],
+        logging_dir: Path,
+        num_workers: Optional[int] = None,
+        runs_per_network: int = 1,
+        max_steps: int = 1000,
+        seed: int = 2021,
 ):
     logging_dir = prepare_logging_dir(environment_name, logging_dir)
     config = neat.Config(
@@ -66,7 +66,6 @@ def run_neat(
         max_steps=max_steps,
         runs_per_network=runs_per_network,
     )
-
 
     with (logging_dir / 'hyperparameters.json').open('w') as file:
         json.dump(
@@ -97,8 +96,8 @@ def run_neat(
 
 
 def prepare_logging_dir(
-    env_name: str,
-    root: Path,
+        env_name: str,
+        root: Path,
 ) -> Path:
     now = datetime.now()
     time = now.strftime('%Y-%m-%d %H:%M:%S')
@@ -110,20 +109,19 @@ def prepare_logging_dir(
 
 
 def run_actor_critic(
-    environment_name: str,
-    max_frames: Optional[int],
-    lr: float,
-    gamma: float,
-    logging_dir: Path,
-    stop_time: Optional = None,
-    use_gpu: bool = True,
-    normalize_advantage: bool = False,
-    value_loss_coef: float = 0.5,
-    entropy_coef: float = 0.01,
-    common_stem: bool = False,
-    seed=2021,
+        environment_name: str,
+        max_frames: Optional[int],
+        lr: float,
+        gamma: float,
+        logging_dir: Path,
+        stop_time: Optional = None,
+        use_gpu: bool = True,
+        normalize_advantage: bool = False,
+        value_loss_coef: float = 0.5,
+        entropy_coef: float = 0.01,
+        common_stem: bool = False,
+        seed=2021,
 ):
-
     logging_dir = prepare_logging_dir(environment_name, logging_dir)
     with (logging_dir / 'hyperparameters.json').open('w') as file:
         json.dump(

@@ -1,15 +1,15 @@
 from typing import Sequence, Type
 
 import numpy as np
-from torch import nn
+from torch import nn, optim
 
 from neat_improved.rl.actor_critic.distributions import get_action_distribution
 from neat_improved.rl.actor_critic.utils import init
 
 
 def _create_mlp(
-    channels: Sequence[int],
-    activation_class: Type[nn.Module],
+        channels: Sequence[int],
+        activation_class: Type[nn.Module],
 ) -> nn.Module:
     layers = []
     for in_ch, out_ch in zip(channels, channels[1:]):
@@ -21,10 +21,10 @@ def _create_mlp(
 
 class ActorCritic(nn.Module):
     def __init__(
-        self,
-        num_inputs: int,
-        hidden_size: int = 64,
-        num_hidden_layers: int = 2,
+            self,
+            num_inputs: int,
+            hidden_size: int = 64,
+            num_hidden_layers: int = 2,
     ):
         super().__init__()
 
@@ -64,9 +64,9 @@ class ActorCritic(nn.Module):
 
 class CommonStemActorCritic(ActorCritic):
     def __init__(
-        self,
-        num_inputs: int,
-        hidden_size: int = 64,
+            self,
+            num_inputs: int,
+            hidden_size: int = 64,
     ):
         super().__init__(
             num_inputs=hidden_size,
@@ -83,7 +83,12 @@ class CommonStemActorCritic(ActorCritic):
 
 
 class PolicyA2C(nn.Module):
-    def __init__(self, obs_shape, action_space, common_stem=False):
+    def __init__(
+            self,
+            obs_shape,
+            action_space,
+            common_stem: bool = False,
+    ):
         super(PolicyA2C, self).__init__()
 
         cls = CommonStemActorCritic if common_stem else ActorCritic
