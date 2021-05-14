@@ -36,10 +36,8 @@ class FileRLReporter(BaseRLReporter):
 
     def on_update_end(
         self,
-        iteration,
         num_frames,
         fitness,
-        policy_loss,
         **kwargs,
     ):
         if self.start_time is None:
@@ -48,10 +46,8 @@ class FileRLReporter(BaseRLReporter):
         with self._get_writer(_NAME, _FIELDS, 'a') as writer:
             writer.writerow(
                 {
-                    'iteration': iteration,
                     'num_frames': num_frames,
                     'fitness': fitness,
-                    'loss': policy_loss,
                     'time_in_s': time() - self.start_time,
                 }
             )
@@ -60,24 +56,19 @@ class FileRLReporter(BaseRLReporter):
 class StdRLReporter(BaseRLReporter):
     def __init__(
         self,
-        log_once_every: int = 1,
+        log_once_every: int = 1000,
     ):
         self.start_time = None
         self.log_once_every = log_once_every
 
     def on_update_end(
         self,
-        iteration,
         num_frames,
         fitness,
-        policy_loss,
         **kwargs,
     ):
         if self.start_time is None:
             self.start_time = time()
 
-        if (iteration % self.log_once_every) == 0:
-            print(
-                f'iteration: {iteration}, fitness: {fitness}, time: {time() - self.start_time:.2f}s'
-                f' loss: {policy_loss}'
-            )
+        if (num_frames % self.log_once_every) == 0:
+            print(f'fitness: {fitness}')

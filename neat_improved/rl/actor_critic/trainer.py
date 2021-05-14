@@ -1,24 +1,25 @@
-from collections import defaultdict
 from itertools import count
 from time import time
-from typing import Optional, Sequence, Callable
+from typing import Optional, Sequence, Callable, Tuple
 
 import numpy as np
 import torch
 import torch.nn.functional as F
 from gym.spaces import Box
 from stable_baselines3.common.vec_env import VecEnv
-from torch import nn, optim
+from torch import nn, optim, Tensor
 
-from neat_improved.rl.actor_critic.utils import explained_variance
+from neat_improved.rl.actor_critic.a2c import PolicyA2C
 from neat_improved.rl.reporters import BaseRLReporter
 from neat_improved.trainer import BaseTrainer
+
+_FLOAT = torch.float32
 
 
 class A2CTrainer(BaseTrainer):
     def __init__(
         self,
-        policy: nn.Module,
+        policy: PolicyA2C,
         vec_envs: VecEnv,
         n_steps: int = 5,
         lr: float = 7e-4,
@@ -35,7 +36,7 @@ class A2CTrainer(BaseTrainer):
         critic_loss_func: Callable = F.mse_loss,
         reporters: Optional[Sequence[BaseRLReporter]] = None,
     ):
-        super(A2CTrainer, self).__init__()
+        super().__init__()
 
         self.device = 'cuda' if use_gpu else 'cpu'
         self.policy = policy.to(self.device)
@@ -60,11 +61,11 @@ class A2CTrainer(BaseTrainer):
         self.reporters = reporters or ()
         self.critic_loss_func = critic_loss_func
         self.log_interval = log_interval
-        self.n_envs = self.vec_envs.num_envs
         self.n_steps = n_steps
-        self.mini_batch = self.n_steps * self.n_envs
+        self.mini_batch = self.n_steps * self.vec_envs.num_envs
 
         self._num_frames = 0
+        self._fitness_logger = _FitnessLogger(self.vec_envs.num_envs)
 
     def _train(
         self,
@@ -74,116 +75,21 @@ class A2CTrainer(BaseTrainer):
         start_time = time()
         iter_ = count()
 
-        state = self.vec_envs.reset()
-        fitness_scores = [0] * self.vec_envs.num_envs
+        last_state = torch.tensor(self.vec_envs.reset(), dtype=torch.float32, device=self.device)
+        last_mask = torch.ones(self.vec_envs.num_envs, dtype=torch.float32, device=self.device)
 
-        fitness = 0.0
-        for update in iter_:
+        for _ in iter_:
             if stop_time and (time() - start_time) >= stop_time:
                 break
 
             if self._num_frames and (self._num_frames >= num_frames):
                 break
 
-            (
-                entropy,
-                actor_loss,
-                critic_loss,
-                policy_loss,
-                episode_end_fitness_scores,
-                values,
-                returns,
-            ) = self.update(state, fitness_scores)
-            n_seconds = time() - start_time
+            last_state, last_mask = self._update(last_state, last_mask)
 
-            if episode_end_fitness_scores:
-                fitness = np.array(episode_end_fitness_scores).mean()
-
-            self._call_reporters(
-                'on_update_end',
-                iteration=update,
-                fitness=fitness,
-                policy_loss=policy_loss.item(),
-                num_frames=self._num_frames,
-            )
-
-            # Calculate the fps (frame per second)
-            fps = int((update * self.mini_batch) / n_seconds)
-
-            if (update % self.log_interval) == 0 or update == 1:
-                ev = explained_variance(values, returns)
-
-                total_num_steps = (update + 1) * self.n_envs * self.n_steps
-                print(f"Updates: {update}, total env steps: {total_num_steps}, fps: {fps}")
-                print(f"Entropy: {entropy:.4f}, policy loss: {policy_loss:.4f}")
-                print(f"Explained variance: {float(ev):.4f}")
-                print(f"Fitness: {fitness}")
-                print("---")
-
-    def update(self, state, fitness_scores):
-        buffer = defaultdict(list)
-        entropy = 0.0
-
-        episode_end_fitness_scores = []
-
-        n = 0
-        for _ in range(self.n_steps):
-            state = torch.tensor(state, dtype=torch.float32, device=self.device)
-            action, critic_values, action_log_probs, dist_entropy = self.policy(state)
-            action = action.cpu().numpy()
-
-            # Clip the actions to avoid out of bound error
-            clipped_action = action
-            if isinstance(self.action_space, Box):
-                clipped_action = np.clip(action, self.action_space.low, self.action_space.high)
-            else:
-                clipped_action = clipped_action.flatten()
-
-            # take action in env and look the results
-            state, reward, done, infos = self.vec_envs.step(clipped_action)
-
-            entropy += dist_entropy.sum()
-            n += len(dist_entropy)
-
-            for i, (r, d) in enumerate(zip(reward, done)):
-                if not d:
-                    fitness_scores[i] += r
-                else:
-                    episode_end_fitness_scores.append(fitness_scores[i])
-                    fitness_scores[i] = 0.0
-
-            self._num_frames += self.vec_envs.num_envs
-
-            buffer['log_probs'].append(action_log_probs)
-            buffer['values'].append(critic_values)
-            buffer['rewards'].append(
-                torch.tensor(
-                    reward,
-                    dtype=torch.float,
-                    device=self.device,
-                ).unsqueeze(1)
-            )
-            buffer['masks'].append(
-                torch.tensor(
-                    1 - done,
-                    device=self.device,
-                ).unsqueeze(1)
-            )
-
-        entropy /= n
-        next_state = torch.tensor(
-            state,
-            dtype=torch.float,
-            device=self.device,
-        )
-        next_value = self.policy.get_critic_values(next_state)
-        returns = self.compute_returns(next_value, buffer['rewards'], buffer['masks'])
-
-        log_probs = torch.cat(buffer['log_probs'])
-        returns = torch.cat(returns).detach()
-        values = torch.cat(buffer['values'])
-
-        advantage = returns - values
+    def _update(self, last_state: Tensor, last_mask: Tensor, ) -> Tuple[Tensor, Tensor]:
+        advantage, entropy, last_mask, last_state, log_probs, returns, values = self._rollout(
+            last_mask, last_state)
 
         if self.normalize_advantage:
             advantage = (advantage - advantage.mean()) / (advantage.std() + 1e-8)
@@ -198,17 +104,98 @@ class A2CTrainer(BaseTrainer):
         nn.utils.clip_grad_norm_(self.policy.parameters(), self.max_grad_norm)
         self.optimizer.step()
 
-        return entropy, actor_loss, critic_loss, loss, episode_end_fitness_scores, values, returns
+        fitness = self._fitness_logger.get_logs_and_reset_buffer()
+        self._call_reporters(
+            'on_update_end',
+            num_frames=self._num_frames,
+            fitness=fitness,
+        )
 
-    def compute_returns(self, next_value, rewards, masks):
-        r = next_value
-        returns = []
+        return last_state, last_mask
+
+    def _rollout(self, last_mask, last_state):
+        entropy = 0.0
+        log_probs = torch.empty(
+            (self.n_steps, self.vec_envs.num_envs), dtype=_FLOAT, device=self.device
+        )
+        values = torch.empty_like(log_probs)
+        rewards = torch.empty_like(log_probs)
+        masks = torch.empty_like(log_probs)
+        for step in range(self.n_steps):
+            action, critic_values, action_log_probs, dist_entropy = self.policy(last_state)
+            action = action.detach().cpu().numpy()
+
+            # Clip the actions to avoid out of bound error
+            clipped_action = action
+            if isinstance(self.action_space, Box):
+                clipped_action = np.clip(action, self.action_space.low, self.action_space.high)
+            else:
+                clipped_action = clipped_action.flatten()
+
+            state, reward, done, infos = self.vec_envs.step(clipped_action)
+            entropy += dist_entropy.sum()
+
+            log_probs[step] = action_log_probs.flatten()
+            values[step] = critic_values.flatten()
+            rewards[step] = torch.tensor(reward, dtype=_FLOAT, device=self.device)
+            masks[step] = last_mask
+
+            last_mask = torch.tensor(1 - done, device=self.device)
+            last_state = torch.tensor(state, dtype=_FLOAT, device=self.device)
+
+            self._num_frames += self.vec_envs.num_envs
+            self._fitness_logger.log(reward, done)
+
+        entropy /= self.n_steps * self.vec_envs.num_envs
+        _, critic_values, *_ = self.policy(last_state)
+        returns, advantage = self._compute_returns_and_advantage(
+            critic_values, last_mask, masks, rewards, values
+        )
+        return advantage, entropy, last_mask, last_state, log_probs, returns, values
+
+    def _compute_returns_and_advantage(
+        self, last_values: torch.Tensor, last_mask, masks, rewards, values
+    ):
+        last_values = last_values.clone().flatten()
+
+        last_gae_lam = 0
+        advantages = torch.zeros_like(rewards)
         for step in reversed(range(len(rewards))):
-            r = rewards[step] + self.gamma * r * masks[step]
-            returns.insert(0, r)
+            if step == len(rewards) - 1:
+                next_non_terminal = last_mask
+                next_values = last_values
+            else:
+                next_non_terminal = masks[step + 1]
+                next_values = values[step + 1]
+            delta = rewards[step] + self.gamma * next_values * next_non_terminal - values[step]
+            last_gae_lam = delta + self.gamma * next_non_terminal * last_gae_lam
 
-        return returns
+            advantages[step] = last_gae_lam
+
+        returns = advantages + values
+        return returns, advantages
 
     def _call_reporters(self, stage: str, *args, **kwargs):
         for reporter in self.reporters:
             getattr(reporter, stage)(*args, **kwargs)
+
+
+class _FitnessLogger:
+    def __init__(self, num_envs: int):
+        self._fitness_scores = [0] * num_envs
+        self._fitnesses = []
+        self._fitness = 0.
+
+    def log(self, reward, done):
+        for i, (r, d) in enumerate(zip(reward, done)):
+            if not d:
+                self._fitness_scores[i] += r
+            else:
+                self._fitnesses.append(self._fitness_scores[i])
+                self._fitness_scores[i] = 0.0
+
+    def get_logs_and_reset_buffer(self):
+        if self._fitnesses:
+            self._fitness = np.mean(self._fitnesses)
+        self._fitnesses = []
+        return self._fitness

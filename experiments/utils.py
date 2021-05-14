@@ -6,12 +6,13 @@ from typing import Optional
 import neat
 import torch
 from gym import Env
+from gym.spaces import Box
 from neat import StdOutReporter
 from neat.nn import FeedForwardNetwork
 from stable_baselines3 import A2C
 from stable_baselines3.a2c import MlpPolicy
 from stable_baselines3.common.env_util import make_vec_env
-from stable_baselines3.common.vec_env import SubprocVecEnv
+from stable_baselines3.common.vec_env import DummyVecEnv, VecEnv
 
 from neat_improved.neat import NEAT_CONFIGS
 from neat_improved.neat.action_handler import handle_action
@@ -21,7 +22,7 @@ from neat_improved.neat.trainer import NEATRunner
 from neat_improved.rl.actor_critic.a2c import PolicyA2C
 from neat_improved.rl.actor_critic.callbacks import CustomCallback
 from neat_improved.rl.actor_critic.trainer import A2CTrainer
-from neat_improved.rl.reporters import FileRLReporter
+from neat_improved.rl.reporters import FileRLReporter, StdRLReporter
 
 
 def render_result(
@@ -70,7 +71,6 @@ def run_neat(
         max_steps=max_steps,
         runs_per_network=runs_per_network,
     )
-
 
     with (logging_dir / 'hyperparameters.json').open('w') as file:
         json.dump(
@@ -125,6 +125,7 @@ def run_actor_critic(
     value_loss_coef: float = 0.5,
     entropy_coef: float = 0.01,
     common_stem: bool = False,
+    num_hidden_layers: int = 1,
     seed=2021,
 ):
 
@@ -149,16 +150,19 @@ def run_actor_critic(
     envs = make_vec_env(
         env_id=environment_name,
         seed=seed,
-        n_envs=5,
+        n_envs=10,
         monitor_dir=str(logging_dir),
-        # vec_env_cls=DummyVecEnv,
-        vec_env_cls=SubprocVecEnv,
+        vec_env_cls=DummyVecEnv,
     )
 
     policy = PolicyA2C(
         envs.observation_space.shape,
         envs.action_space,
         common_stem=common_stem,
+        actor_critic_kwargs={
+            'hidden_size': 64,
+            'num_hidden_layers': num_hidden_layers,
+        }
     )
     trainer = A2CTrainer(
         policy=policy,
@@ -170,13 +174,37 @@ def run_actor_critic(
         lr=lr,
         normalize_advantage=normalize_advantage,
         entropy_coef=entropy_coef,
-        reporters=(FileRLReporter(save_dir_path=logging_dir),),
+        reporters=(FileRLReporter(save_dir_path=logging_dir), StdRLReporter()),
     )
 
     trainer.train(
         stop_time=stop_time,
         num_frames=max_frames,
     )
+
+    _render(policy, envs)
+
+
+import numpy as np
+
+
+def _render(policy, envs: VecEnv):
+    state = envs.reset()
+
+    while True:
+        state = torch.tensor(state, device=torch.device('cuda:0'))
+        action, critic_values, action_log_probs, dist_entropy = policy(state)
+        action = action.detach().cpu().numpy()
+
+        clipped_action = action
+        action_space = envs.action_space
+        if isinstance(action_space, Box):
+            clipped_action = np.clip(action, action_space.low, action_space.high)
+        else:
+            clipped_action = clipped_action.flatten()
+
+        state, *_ = envs.step(clipped_action)
+        envs.render()
 
 
 def run_baseline_actor_critic(
@@ -190,7 +218,7 @@ def run_baseline_actor_critic(
     envs = make_vec_env(
         env_id=environment_name,
         seed=seed,
-        n_envs=5,
+        n_envs=10,
         monitor_dir=str(logging_dir),
     )
 

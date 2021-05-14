@@ -20,7 +20,7 @@ class CustomCallback(BaseCallback):
 
         with self._get_writer(_NAME, _FIELDS, 'w') as file:
             file.writeheader()
-        self._fitness_scores = [0] * 5
+        self._fitness_scores = [0] * 10
         self._fitness = 0.
 
     @contextmanager

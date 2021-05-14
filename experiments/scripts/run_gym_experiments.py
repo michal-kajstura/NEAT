@@ -9,24 +9,22 @@ import torch
 from experiments.utils import run_neat, run_actor_critic, run_baseline_actor_critic
 from neat_improved import PROJECT_PATH
 
-RUN_ACTOR_CRITIC = True
-RUN_NEAT = True
 SEED = 2021
 
 STOP_TIME = None
-MAX_FRAMES = int(1e6) // 2
-N_REPEATS = 3
+MAX_FRAMES = int(5e4)
+N_REPEATS = 1
 
-LOGGING_DIR = PROJECT_PATH.parent / 'logs_neat_vs_rl'
+LOGGING_DIR = PROJECT_PATH.parent / 'logs_neat_vs_rl_new'
 LOGGING_DIR.mkdir(exist_ok=True)
 
 enviroments = (
-    'LunarLander-v2',
-    'MountainCarContinuous-v0',
-    'BipedalWalker-v3',
-    'BipedalWalkerHardcore-v3',
+    # 'MountainCarContinuous-v0',
+    # 'CartPole-v0',
+    # 'LunarLander-v2',
+    # 'BipedalWalker-v3',
+    # 'BipedalWalkerHardcore-v3',
     'Pendulum-v0',
-    'CartPole-v0',
 )
 
 USE_GPU = True
@@ -46,8 +44,9 @@ class A2CExperimentConfig:
     gamma: float = 0.99
     normalize_advantage: bool = False
     value_loss_coef: float = 0.5
-    entropy_coef: float = 0.01,
+    entropy_coef: float = 0.00,
     common_stem: bool = False
+    num_hidden_layers: int = 1
     name: str = 'ac'
 
 
@@ -86,6 +85,7 @@ def run_experiment(
             gamma=experiment.gamma,
             normalize_advantage=experiment.normalize_advantage,
             value_loss_coef=experiment.value_loss_coef,
+            num_hidden_layers=experiment.num_hidden_layers,
             seed=seed,
         )
     elif isinstance(experiment, BaselineA2CExperimentConfig):
@@ -99,13 +99,14 @@ def run_experiment(
 
 
 experiment_configs = (
-    # BaselineA2CExperimentConfig(),
-    NEATExperimentConfig(name='neat'),
     A2CExperimentConfig(name='a2c'),
+    # BaselineA2CExperimentConfig(),
+    # A2CExperimentConfig(num_hidden_layers=2, name='a2c_2_hidden_layers'),
+    # A2CExperimentConfig(normalize_advantage=True, name='a2c_normalize_advantage'),
+    # NEATExperimentConfig(name='neat'),
     # A2CExperimentConfig(common_stem=True, name='ac_common_stem'),
+    # A2CExperimentConfig(lr=7e-3, name='ac_lr'),
     # A2CExperimentConfig(common_stem=True, value_loss_coef=0.1),
-    # A2CExperimentConfig(normalize_advantage=False),
-    # A2CExperimentConfig(lr=7e-3),
     # A2CExperimentConfig(entropy_coef=0.1),
     # A2CExperimentConfig(entropy_coef=0.001),
 )

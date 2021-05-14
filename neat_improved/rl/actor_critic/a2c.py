@@ -1,10 +1,15 @@
+from functools import partial
 from typing import Sequence, Type
 
 import numpy as np
+import torch
+from stable_baselines3.common.distributions import (
+    make_proba_distribution,
+    DiagGaussianDistribution,
+    CategoricalDistribution,
+    Distribution,
+)
 from torch import nn
-
-from neat_improved.rl.actor_critic.distributions import get_action_distribution
-from neat_improved.rl.actor_critic.utils import init
 
 
 def _create_mlp(
@@ -12,7 +17,9 @@ def _create_mlp(
     activation_class: Type[nn.Module],
 ) -> nn.Module:
     layers = []
-    for in_ch, out_ch in zip(channels, channels[1:]):
+    for i in range(0, len(channels) - 1):
+        in_ch = channels[i]
+        out_ch = channels[i + 1]
         layers.append(nn.Linear(in_ch, out_ch))
         layers.append(activation_class())
 
@@ -28,7 +35,7 @@ class ActorCritic(nn.Module):
     ):
         super().__init__()
 
-        self._hidden_size = hidden_size
+        self.hidden_size = hidden_size
 
         self.actor = _create_mlp(
             channels=(num_inputs, *([hidden_size] * num_hidden_layers)),
@@ -36,21 +43,9 @@ class ActorCritic(nn.Module):
         )
 
         self.critic = _create_mlp(
-            channels=(num_inputs, *([hidden_size] * num_hidden_layers), 1),
+            channels=(num_inputs, *([hidden_size] * num_hidden_layers)),
             activation_class=nn.Tanh,
         )
-
-        self.apply(self._init_weights)
-
-    @staticmethod
-    def _init_weights(layer):
-        if isinstance(layer, nn.Linear):
-            init(
-                layer,
-                weight_init=nn.init.orthogonal_,
-                bias_init=lambda x: nn.init.constant_(x, 0),
-                gain=np.sqrt(2),
-            )
 
     def forward(self, inputs):
         hidden_actor = self.actor(inputs)
@@ -83,24 +78,62 @@ class CommonStemActorCritic(ActorCritic):
 
 
 class PolicyA2C(nn.Module):
-    def __init__(self, obs_shape, action_space, common_stem=False):
+    def __init__(self, obs_shape, action_space, common_stem=False, actor_critic_kwargs=None):
         super(PolicyA2C, self).__init__()
 
         cls = CommonStemActorCritic if common_stem else ActorCritic
-        self.actor_critic = cls(num_inputs=obs_shape[0])
-        self.dist = get_action_distribution(action_space, self.actor_critic.output_size)
+        self.actor_critic = cls(num_inputs=obs_shape[0], **(actor_critic_kwargs or {}))
+        self.action_dist = make_proba_distribution(action_space)
+
+        hidden_size = self.actor_critic.hidden_size
+        self.value_net = nn.Linear(hidden_size, 1)
+
+        if isinstance(self.action_dist, DiagGaussianDistribution):
+            self.action_net, self.log_std = self.action_dist.proba_distribution_net(
+                latent_dim=hidden_size,
+                log_std_init=0.0,
+            )
+        elif isinstance(self.action_dist, CategoricalDistribution):
+            self.action_net = self.action_dist.proba_distribution_net(latent_dim=hidden_size)
+        else:
+            raise ValueError()
+
+        # originally from openai/baselines (default gains/init_scales).
+        module_gains = {
+            self.actor_critic: np.sqrt(2),
+            self.action_net: 0.01,
+            self.value_net: 1,
+        }
+        for module, gain in module_gains.items():
+            module.apply(partial(self.init_weights, gain=gain))
+
+    @staticmethod
+    def init_weights(module: nn.Module, gain: float = 1) -> None:
+        """
+        Orthogonal initialization (used in PPO and A2C)
+        """
+        if isinstance(module, (nn.Linear, nn.Conv2d)):
+            nn.init.orthogonal_(module.weight, gain=gain)
+            if module.bias is not None:
+                module.bias.data.fill_(0.0)
 
     def forward(self, inputs):
-        critic_values, actor_features = self.actor_critic(inputs)
-        dist = self.dist(actor_features)
+        critic_features, actor_features = self.actor_critic(inputs)
 
-        # TODO: maybe allow deterministic
-        action = dist.sample()
-        action_log_probs = dist.log_probs(action)
-        dist_entropy = dist.entropy()
+        values = self.value_net(critic_features)
+        distribution = self._get_action_dist_from_latent(actor_features)
+        action = distribution.get_actions()
+        log_prob = distribution.log_prob(action)
+        entropy = distribution.entropy()
+        return action, values, log_prob, entropy
 
-        return action, critic_values, action_log_probs, dist_entropy
+    def _get_action_dist_from_latent(self, latent_pi: torch.Tensor) -> Distribution:
+        mean_actions = self.action_net(latent_pi)
 
-    def get_critic_values(self, inputs):
-        critic_values, _ = self.actor_critic(inputs)
-        return critic_values
+        if isinstance(self.action_dist, DiagGaussianDistribution):
+            return self.action_dist.proba_distribution(mean_actions, self.log_std)
+        elif isinstance(self.action_dist, CategoricalDistribution):
+            # Here mean_actions are the logits before the softmax
+            return self.action_dist.proba_distribution(action_logits=mean_actions)
+        else:
+            raise ValueError()
